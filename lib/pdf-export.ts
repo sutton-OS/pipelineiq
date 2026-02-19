@@ -40,9 +40,9 @@ export async function exportReportPDF(data: ReportPDFData): Promise<void> {
   // Team goal section
   doc.setTextColor(15, 15, 15)
   doc.setFontSize(11)
-  doc.setFont(undefined, "bold")
+  doc.setFont("helvetica", "bold")
   doc.text("TEAM PERFORMANCE", margin, 40)
-  doc.setFont(undefined, "normal")
+  doc.setFont("helvetica", "normal")
   doc.setFontSize(28)
   doc.text(`$${data.teamRevenue.toLocaleString()}`, margin, 54)
   doc.setFontSize(11)
@@ -88,9 +88,9 @@ export async function exportReportPDF(data: ReportPDFData): Promise<void> {
 
     doc.setTextColor(15, 15, 15)
     doc.setFontSize(9)
-    doc.setFont(undefined, "bold")
+    doc.setFont("helvetica", "bold")
     doc.text(rep.name, cols.name, y + 6.5)
-    doc.setFont(undefined, "normal")
+    doc.setFont("helvetica", "normal")
     doc.setTextColor(58, 58, 58)
     if (rep.role) doc.text(rep.role, cols.name, y + 10.5)
 

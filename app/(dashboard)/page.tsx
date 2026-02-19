@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { DashboardClient, type DashboardClientProps } from "@/components/dashboard-client";
+import { DashboardClient, type DashboardClientProps, type RepStatus } from "@/components/dashboard-client";
 import { requireUserId } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import type { Rep, RepMetrics, Report, Team } from "@/types/database";
@@ -252,7 +252,7 @@ export default async function DashboardPage() {
       const repConversion = percentFrom(qualified, leads, 0);
       const quotaPercent = quota > 0 ? Math.round((revenue / quota) * 100) : 0;
       const quotaBarPercent = clampPercent(quotaPercent);
-      const status =
+      const status: RepStatus =
         quotaPercent >= 100 ? "On Track" : quotaPercent >= 75 ? "At Risk" : "Behind";
       const palette = avatarPalette[repIndex % avatarPalette.length];
 

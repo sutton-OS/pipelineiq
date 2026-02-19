@@ -36,16 +36,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html
-        lang="en"
-        className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
-      >
-        <body>
+    <html
+      lang="en"
+      className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
+    >
+      <body>
+        <ClerkProvider>
           {children}
           <Toaster position="top-right" richColors />
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
