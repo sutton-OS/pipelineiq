@@ -23,11 +23,22 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: "PipelineIQ",
-    template: "%s | PipelineIQ",
+  title: "PipelineIQ | Beautiful Sales Reporting",
+  description:
+    "One CSV → stunning PDF reports your team will actually read. No more Tableau hell.",
+  openGraph: {
+    title: "PipelineIQ | Beautiful Sales Reporting",
+    description:
+      "One CSV → stunning PDF reports your team will actually read. No more Tableau hell.",
+    images: [
+      {
+        url: "/og-placeholder.svg",
+        width: 1200,
+        height: 630,
+        alt: "PipelineIQ report preview placeholder",
+      },
+    ],
   },
-  description: "Beautiful sales reporting for modern teams.",
 };
 
 export default function RootLayout({

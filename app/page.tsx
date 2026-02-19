@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Home",
-};
+import Link from "next/link";
+import { ReportUploader } from "@/components/ReportUploader";
 
 const sampleReportDoc = `
 <!doctype html>
@@ -263,8 +261,12 @@ export default function LandingPage() {
 
         <section id="sample-report" className="mx-auto w-full max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
           <h2 className="font-serif text-4xl leading-tight text-ink sm:text-5xl">
-            One CSV. One beautiful report. Done in 60 seconds.
+            Demo Preview
           </h2>
+
+          <p className="mt-4 max-w-3xl text-lg text-ink-2">
+            This is the existing dashboard style your CSV uploads are turned into.
+          </p>
 
           <div className="mt-8 overflow-hidden rounded-3xl border border-border bg-paper shadow-[0_20px_50px_rgba(15,15,15,0.09)]">
             <iframe
@@ -272,6 +274,10 @@ export default function LandingPage() {
               srcDoc={sampleReportDoc}
               className="h-[440px] w-full border-0 md:h-[500px]"
             />
+          </div>
+
+          <div className="mt-10">
+            <ReportUploader />
           </div>
         </section>
 

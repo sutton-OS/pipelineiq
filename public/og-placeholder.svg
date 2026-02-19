@@ -1,0 +1,13 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F7F5F0"/>
+  <rect x="54" y="54" width="1092" height="522" rx="18" fill="#ECEAE4" stroke="#D8D5CE" stroke-width="2"/>
+  <rect x="96" y="108" width="300" height="18" rx="9" fill="#3A3A3A"/>
+  <rect x="96" y="146" width="540" height="10" rx="5" fill="#888888"/>
+  <rect x="96" y="195" width="190" height="142" rx="12" fill="#F7F5F0" stroke="#D8D5CE"/>
+  <rect x="316" y="195" width="190" height="142" rx="12" fill="#F7F5F0" stroke="#D8D5CE"/>
+  <rect x="536" y="195" width="190" height="142" rx="12" fill="#F7F5F0" stroke="#D8D5CE"/>
+  <rect x="756" y="195" width="190" height="142" rx="12" fill="#F7F5F0" stroke="#D8D5CE"/>
+  <rect x="96" y="366" width="850" height="140" rx="12" fill="#F7F5F0" stroke="#D8D5CE"/>
+  <text x="96" y="560" fill="#0F0F0F" font-size="44" font-family="Georgia, serif">PipelineIQ</text>
+  <text x="365" y="560" fill="#3A3A3A" font-size="26" font-family="Arial, sans-serif">Beautiful Sales Reporting</text>
+</svg>

@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PipelineIQ
 
-## Getting Started
+> **Beautiful sales reports from one CSV**
 
-First, run the development server:
+PipelineIQ turns raw sales exports into polished, paper-style PDF reports in minutes.
+Upload once, share instantly, and stop losing time in dashboard tooling.
 
+## Features
+
+- CSV upload flow designed for non-technical teams
+- Auto-generated, print-ready PDF sales reports
+- Paper-and-ink visual language for clean executive summaries
+- Individual report detail pages and historical report management
+- Authenticated workspace access with Clerk
+- Stripe-powered billing hooks for paid plans
+
+## Screenshots
+
+![PipelineIQ Dashboard Placeholder](https://placehold.co/1200x720/F7F5F0/0F0F0F?text=PipelineIQ+Dashboard+Screenshot)
+*Dashboard overview with KPI cards and trend breakdowns*
+
+![PipelineIQ Report Placeholder](https://placehold.co/1200x720/ECEAE4/0F0F0F?text=Generated+Sales+Report+Screenshot)
+*Generated report preview with paper-style formatting*
+
+## Tech Stack
+
+- Next.js (App Router) + React + TypeScript
+- Tailwind CSS 4 with custom paper/ink design tokens
+- Supabase for data persistence
+- Clerk for authentication
+- Stripe for billing and plan management
+- jsPDF for PDF generation
+
+## Quickstart
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Copy the environment template:
+```bash
+cp .env.example .env.local
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Fill in your API keys and app URLs in `.env.local`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Start the app:
+```bash
+npm run dev
+```
 
-## Learn More
+5. Open `http://localhost:3000`.
 
-To learn more about Next.js, take a look at the following resources:
+## Environment Variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Use `.env.example` as the source of truth for required keys.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Live Demo
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Live demo is coming soon.
+For now, run locally and use your own CSV export to test the full flow end-to-end.
