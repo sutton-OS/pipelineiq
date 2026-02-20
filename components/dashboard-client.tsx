@@ -219,13 +219,13 @@ export function DashboardClient(props: DashboardClientProps) {
 
       <section className="mb-7 flex flex-col justify-between gap-6 rounded-[10px] bg-[var(--ink)] px-7 py-6 text-white md:flex-row md:items-center md:gap-10">
         <div className="flex flex-col gap-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-white/50">Team Revenue · This Month</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-white text-white/50">Team Revenue · This Month</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
-            <p className="font-serif text-[42px] leading-none tracking-[-1px]">{teamRevenueDisplay}</p>
-            <p className="text-base text-white/45">/ {teamGoalDisplay} goal</p>
+            <p className="font-serif text-[42px] leading-none tracking-[-1px] text-white">{teamRevenueDisplay}</p>
+            <p className="text-base text-white text-white/45">/ {teamGoalDisplay} goal</p>
           </div>
           <span
-            className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-medium"
+            className="inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-medium text-white"
             style={
               isPaceBehind
                 ? { background: "rgba(200,73,26,0.25)", color: "#f08060" }
@@ -241,13 +241,13 @@ export function DashboardClient(props: DashboardClientProps) {
         </div>
         <div className="w-full max-w-[340px]">
           <div className="mb-2.5 flex items-center justify-between text-[12px] text-white/55">
-            <span>{goalPercentDisplay} to goal</span>
-            <span>Need {remainingToGoalDisplay} more</span>
+            <span className="text-white">{goalPercentDisplay} to goal</span>
+            <span className="text-white">Need {remainingToGoalDisplay} more</span>
           </div>
           <div className="h-[6px] overflow-hidden rounded-full bg-white/15">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${goalBarPercent}%` }} />
           </div>
-          <p className="mt-1.5 text-[11px] text-white/40">On track threshold: 78% at this point in month</p>
+          <p className="mt-1.5 text-[11px] text-white text-white/40">On track threshold: 78% at this point in month</p>
         </div>
       </section>
 

@@ -1,66 +1,190 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import { FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type CsvRecord = Record<string, unknown>;
+type CsvRawRow = string[];
+type MembershipKey =
+  | "Premium"
+  | "Plus"
+  | "FAO"
+  | "Corporate"
+  | "Upgrade"
+  | "Other";
 
-type RepStatus = "On Track" | "At Risk" | "Behind";
-
-type ParsedRep = {
-  repName: string;
-  revenue: number;
-  quota: number;
-  status: RepStatus;
+type PayPeriod = {
+  label: string;
+  amount: number;
+  units: number;
+  bonus: number;
 };
 
-const COLORS = {
-  paper: [249, 245, 235] as const,
-  ink: [26, 26, 26] as const,
-  inkMuted: [88, 88, 88] as const,
-  border: [216, 213, 206] as const,
-  green: [26, 110, 60] as const,
-  amber: [176, 125, 0] as const,
-  red: [197, 34, 31] as const,
+type TrainerCount = {
+  name: string;
+  count: number;
 };
 
-function normalizeHeader(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
+type CommissionReport = {
+  totalRevenue: number;
+  totalSales: number;
+  totalFP: number;
+  fpRate: number;
+  avgCommission: number;
+  membershipCounts: Record<MembershipKey, number>;
+  trainerCounts: TrainerCount[];
+  payPeriods: PayPeriod[];
+  totalBonuses: number;
+  bestPeriod: PayPeriod | null;
+  cancellations: number;
+};
+
+const MONTH_HEADER_PATTERN =
+  /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$/i;
+
+const MEMBERSHIP_ORDER: MembershipKey[] = [
+  "Premium",
+  "Plus",
+  "FAO",
+  "Corporate",
+  "Upgrade",
+  "Other",
+];
+
+const MEMBERSHIP_COLORS: Record<MembershipKey, string> = {
+  Plus: "#0f0f0f",
+  Premium: "#3a3a3a",
+  FAO: "#666666",
+  Upgrade: "#888888",
+  Corporate: "#c8491a",
+  Other: "#aca59a",
+};
+
+function buildEmptyMembershipCounts(): Record<MembershipKey, number> {
+  return {
+    Premium: 0,
+    Plus: 0,
+    FAO: 0,
+    Corporate: 0,
+    Upgrade: 0,
+    Other: 0,
+  };
 }
 
-function findHeader(headers: string[], aliases: string[]) {
-  const headerMap = new Map(
-    headers.map((header) => [normalizeHeader(header), header])
-  );
-
-  for (const alias of aliases) {
-    const match = headerMap.get(alias);
-    if (match) return match;
-  }
-
-  return null;
-}
-
-function parseMoney(value: unknown) {
+function parseCommission(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string") return 0;
 
-  const cleaned = value.replace(/[$,%\s,]/g, "");
+  const cleaned = value.replace(/[^0-9.-]/g, "");
   const parsed = Number.parseFloat(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function deriveStatus(revenue: number, quota: number): RepStatus {
-  const attainment = quota > 0 ? revenue / quota : 0;
+function extractDollarValues(text: string) {
+  const matches = text.match(/\$\s*-?[\d,]+(?:\.\d+)?/g) ?? [];
+  return matches
+    .map((match) => Number.parseFloat(match.replace(/[^0-9.-]/g, "")))
+    .filter((value) => Number.isFinite(value));
+}
 
-  if (attainment >= 1) return "On Track";
-  if (attainment >= 0.85) return "At Risk";
-  return "Behind";
+function firstNumericValue(text: string) {
+  const match = text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 0;
+
+  const parsed = Number.parseFloat(match[0]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function extractUnits(cells: string[]) {
+  for (const cell of cells) {
+    if (!/unit/i.test(cell)) continue;
+    const value = firstNumericValue(cell);
+    if (value) return value;
+  }
+
+  for (const cell of cells) {
+    if (cell.includes("$")) continue;
+    const value = firstNumericValue(cell);
+    if (value) return value;
+  }
+
+  return 0;
+}
+
+function cleanPayPeriodLabel(label: string, index: number) {
+  const cleaned = label
+    .replace(/\b(pay\s*period|pay\s*date|period|summary|date)\b/gi, " ")
+    .replace(/[:|\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned || `Period ${index + 1}`;
+}
+
+function parsePayPeriodSummary(row: string[], index: number): PayPeriod {
+  const firstColumn = row[0] ?? "";
+  const col7 = row[7] ?? "";
+  const col8 = row[8] ?? "";
+  const label = cleanPayPeriodLabel(firstColumn, index);
+
+  const tokens = [col7, col8].flatMap((cell) => {
+    const values = extractDollarValues(cell);
+    const isBonusCell = /bonus/i.test(cell);
+    return values.map((value) => ({ value, isBonusCell }));
+  });
+
+  let bonus = tokens
+    .filter((token) => token.isBonusCell)
+    .reduce((sum, token) => sum + token.value, 0);
+
+  const nonBonusValues = tokens
+    .filter((token) => !token.isBonusCell)
+    .map((token) => token.value);
+
+  let amount = nonBonusValues[0] ?? 0;
+  if (nonBonusValues.length > 1) {
+    bonus += nonBonusValues.slice(1).reduce((sum, value) => sum + value, 0);
+  }
+
+  if (amount === 0 && bonus === 0 && tokens.length > 0) {
+    amount = tokens[0]?.value ?? 0;
+    bonus = tokens.slice(1).reduce((sum, token) => sum + token.value, 0);
+  }
+
+  const units = extractUnits([col8, col7, row[6] ?? ""]);
+
+  return {
+    label,
+    amount,
+    units,
+    bonus,
+  };
+}
+
+function looksLikeMonthHeader(firstColumn: string) {
+  return MONTH_HEADER_PATTERN.test(firstColumn.trim());
+}
+
+function looksLikeHeaderRow(row: string[]) {
+  const first = (row[0] ?? "").toLowerCase();
+  const second = (row[1] ?? "").toLowerCase();
+  return first.includes("date") && second.includes("member");
+}
+
+function isPaySummaryRow(firstColumn: string) {
+  const lowered = firstColumn.toLowerCase();
+  return lowered.includes("pay") || lowered.includes("date");
+}
+
+function categorizeMembership(value: string): MembershipKey {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("premium")) return "Premium";
+  if (normalized.includes("plus")) return "Plus";
+  if (normalized.includes("fao")) return "FAO";
+  if (normalized.includes("corporate")) return "Corporate";
+  if (normalized.includes("upgrade")) return "Upgrade";
+  return "Other";
 }
 
 function formatCurrency(value: number) {
@@ -71,8 +195,17 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatPercent(value: number) {
-  return `${Math.round(value)}%`;
+function formatPercent(value: number, fractionDigits = 1) {
+  return `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value)}%`;
+}
+
+function formatUnits(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "0";
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(1).replace(/\.0$/, "");
 }
 
 function sanitizeFileName(value: string) {
@@ -83,16 +216,102 @@ function sanitizeFileName(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function getStatusClass(status: RepStatus) {
-  if (status === "On Track") return "bg-[#e2f0e8] text-[#1a6e3c]";
-  if (status === "At Risk") return "bg-[#fdf4d8] text-[#b07d00]";
-  return "bg-[#fce8e6] text-[#c5221f]";
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-function getStatusRgb(status: RepStatus) {
-  if (status === "On Track") return COLORS.green;
-  if (status === "At Risk") return COLORS.amber;
-  return COLORS.red;
+function parseCommissionReport(rawRows: CsvRawRow[]) {
+  const membershipCounts = buildEmptyMembershipCounts();
+  const trainerMap = new Map<string, TrainerCount>();
+  const payPeriods: PayPeriod[] = [];
+
+  let totalRevenue = 0;
+  let totalSales = 0;
+  let totalFP = 0;
+  let cancellations = 0;
+  let headerSkipped = false;
+
+  for (const rawRow of rawRows) {
+    const row = rawRow.map((cell) => String(cell ?? "").trim());
+    if (row.every((cell) => cell === "")) continue;
+
+    const firstColumn = row[0] ?? "";
+
+    if (!headerSkipped && looksLikeHeaderRow(row)) {
+      headerSkipped = true;
+      continue;
+    }
+
+    if (looksLikeMonthHeader(firstColumn)) continue;
+
+    if (isPaySummaryRow(firstColumn)) {
+      payPeriods.push(parsePayPeriodSummary(row, payPeriods.length));
+      continue;
+    }
+
+    const memberName = row[1] ?? "";
+    const membershipType = row[2] ?? "";
+    const trainer = row[4] ?? "";
+    const commissionRaw = row[5] ?? "";
+
+    const hasData = [memberName, membershipType, trainer, commissionRaw].some(
+      (cell) => cell.trim() !== ""
+    );
+
+    if (!hasData) continue;
+
+    const commission = parseCommission(commissionRaw);
+
+    totalRevenue += commission;
+    if (commission > 0) totalSales += 1;
+    if (commission < 0) cancellations += 1;
+
+    membershipCounts[categorizeMembership(membershipType)] += 1;
+
+    if (trainer !== "") {
+      totalFP += 1;
+      const key = trainer.toLowerCase();
+      const existing = trainerMap.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        trainerMap.set(key, { name: trainer, count: 1 });
+      }
+    }
+  }
+
+  const trainerCounts = Array.from(trainerMap.values()).sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+  );
+
+  const totalBonuses = payPeriods.reduce((sum, period) => sum + period.bonus, 0);
+  const bestPeriod =
+    payPeriods.reduce<PayPeriod | null>((best, current) => {
+      if (!best || current.amount > best.amount) return current;
+      return best;
+    }, null) ?? null;
+
+  const fpRate = totalSales > 0 ? (totalFP / totalSales) * 100 : 0;
+  const avgCommission = totalSales > 0 ? totalRevenue / totalSales : 0;
+
+  return {
+    totalRevenue,
+    totalSales,
+    totalFP,
+    fpRate,
+    avgCommission,
+    membershipCounts,
+    trainerCounts,
+    payPeriods,
+    totalBonuses,
+    bestPeriod,
+    cancellations,
+  } satisfies CommissionReport;
 }
 
 export function ReportUploader() {
@@ -102,106 +321,565 @@ export function ReportUploader() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [fileName, setFileName] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
-  const [rows, setRows] = useState<ParsedRep[]>([]);
+  const [report, setReport] = useState<CommissionReport | null>(null);
 
-  const totals = useMemo(() => {
-    const teamRevenue = rows.reduce((sum, row) => sum + row.revenue, 0);
-    const teamQuota = rows.reduce((sum, row) => sum + row.quota, 0);
-    const attainment = teamQuota > 0 ? (teamRevenue / teamQuota) * 100 : 0;
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap";
+    document.head.appendChild(link);
+  }, []);
 
-    return {
-      teamRevenue,
-      teamQuota,
-      attainment,
-      onTrackCount: rows.filter((row) => row.status === "On Track").length,
-      avgRevenue: rows.length > 0 ? teamRevenue / rows.length : 0,
-    };
-  }, [rows]);
+  const reportHTML = useMemo(() => {
+    if (!report) return "";
+
+    const avgPayPeriod =
+      report.payPeriods.length > 0
+        ? report.payPeriods.reduce((sum, period) => sum + period.amount, 0) /
+          report.payPeriods.length
+        : 0;
+
+    const maxPeriodAmount =
+      report.payPeriods.length > 0
+        ? Math.max(...report.payPeriods.map((period) => period.amount), 0)
+        : 0;
+
+    const membershipRows = MEMBERSHIP_ORDER.map((type) => ({
+      type,
+      count: report.membershipCounts[type],
+    })).sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+
+    const topMembershipType = membershipRows[0] ?? null;
+    const maxMembershipCount = membershipRows[0]?.count ?? 0;
+    const trackedMembershipCount = membershipRows.reduce(
+      (sum, membership) => sum + membership.count,
+      0
+    );
+
+    const topTrainer = report.trainerCounts[0] ?? null;
+    const displayedTrainers = report.trainerCounts.slice(0, 7);
+    const maxTrainerCount = displayedTrainers[0]?.count ?? 0;
+
+    const bonusPeriods = report.payPeriods.filter((period) => period.bonus > 0);
+    const withoutFp = Math.max(report.totalSales - report.totalFP, 0);
+
+    const firstPeriod = report.payPeriods[0]?.label ?? "";
+    const lastPeriod = report.payPeriods[report.payPeriods.length - 1]?.label ?? "";
+    const periodRangeLabel =
+      firstPeriod && lastPeriod ? `${firstPeriod} - ${lastPeriod}` : "Uploaded CSV";
+
+    const bestPeriodIndex = report.bestPeriod
+      ? report.payPeriods.findIndex(
+          (period) =>
+            period.label === report.bestPeriod?.label &&
+            period.amount === report.bestPeriod?.amount &&
+            period.units === report.bestPeriod?.units &&
+            period.bonus === report.bestPeriod?.bonus
+        )
+      : -1;
+
+    const payPeriodRowsHTML =
+      report.payPeriods.length > 0
+        ? report.payPeriods
+            .map((period, index) => {
+              const isBest = index === bestPeriodIndex;
+              const trendWidth =
+                maxPeriodAmount > 0
+                  ? Math.max((period.amount / maxPeriodAmount) * 100, 2)
+                  : 2;
+
+              return `
+      <tr${isBest ? ' style="background:var(--paper-2)"' : ""}>
+        <td><span class="period-name">${escapeHtml(period.label)}</span></td>
+        <td><span class="mono"${isBest ? ' style="color:var(--accent)"' : ""}>${formatCurrency(period.amount)}</span></td>
+        <td><span class="mono">${formatUnits(period.units)}</span></td>
+        <td>${
+          period.bonus > 0
+            ? `<span class="bonus-badge">+${formatCurrency(period.bonus)} bonus</span>`
+            : "-"
+        }</td>
+        <td class="bar-cell"><div class="mini-bar"><div class="mini-bar-fill" style="width:${trendWidth}%;${
+                  isBest ? "background:var(--accent);" : ""
+                }"></div></div></td>
+      </tr>`;
+            })
+            .join("")
+        : `
+      <tr>
+        <td colspan="5" style="padding:16px 0;color:var(--ink-3)">No pay period summary rows found.</td>
+      </tr>`;
+
+    const membershipRowsHTML = membershipRows
+      .map((membership) => {
+        const width =
+          maxMembershipCount > 0
+            ? Math.max((membership.count / maxMembershipCount) * 100, membership.count > 0 ? 7 : 0)
+            : 0;
+
+        return `
+        <div class="mem-row">
+          <div class="mem-label">${membership.type}</div>
+          <div class="mem-track">
+            <div class="mem-fill" style="width:${width}%;background:${MEMBERSHIP_COLORS[membership.type]}">${membership.count}</div>
+          </div>
+          <div class="mem-count">${membership.count}</div>
+        </div>`;
+      })
+      .join("");
+
+    const trainerRowsHTML =
+      displayedTrainers.length > 0
+        ? displayedTrainers
+            .map((trainer, index) => {
+              const width =
+                maxTrainerCount > 0
+                  ? Math.max((trainer.count / maxTrainerCount) * 100, 4)
+                  : 4;
+
+              return `
+          <tr>
+            <td>
+              <span class="trainer-rank">${String(index + 1).padStart(2, "0")}</span>
+              <span class="trainer-name">${escapeHtml(trainer.name)}</span>
+              <span class="fp-bar"><span class="fp-bar-fill" style="width:${width}%"></span></span>
+            </td>
+            <td><span${index === 0 ? ' style="color:var(--green);font-weight:600"' : ""}>${trainer.count} FPs</span></td>
+          </tr>`;
+            })
+            .join("")
+        : `
+          <tr>
+            <td colspan="2" style="color:var(--ink-3)">No trainer assignments found.</td>
+          </tr>`;
+
+    const bonusRowsHTML =
+      bonusPeriods.length > 0
+        ? bonusPeriods
+            .map(
+              (period) => `
+          <tr>
+            <td style="color:var(--ink-2)">${escapeHtml(period.label)} bonus (${formatUnits(period.units)} units)</td>
+            <td style="color:var(--green);font-weight:600">+${formatCurrency(period.bonus)}</td>
+          </tr>`
+            )
+            .join("")
+        : `
+          <tr>
+            <td colspan="2" style="color:var(--ink-3)">No bonus amounts found in pay period summary rows.</td>
+          </tr>`;
+
+    const generatedDate = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    return `
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #0f0f0f;
+    --ink-2: #3a3a3a;
+    --ink-3: #888;
+    --paper: #f7f5f0;
+    --paper-2: #eceae4;
+    --paper-3: #e0ddd6;
+    --accent: #c8491a;
+    --green: #1a6e3c;
+    --green-light: #e2f0e8;
+    --amber: #b07d00;
+    --amber-light: #fdf4d8;
+    --border: #d8d5ce;
+    --blue: #1a4fa0;
+    --blue-light: #e8f0fe;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 40px 80px;
+  }
+
+  /* HEADER */
+  .report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 36px;
+  }
+  .brand-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+  }
+  .brand-name span { color: var(--accent); font-style: italic; }
+  .brand-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .report-title { font-family: 'Instrument Serif', serif; font-size: 28px; letter-spacing: -0.5px; line-height: 1.1; text-align: right; }
+  .report-period { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; text-align: right; margin-top: 4px; }
+
+  /* HERO BANNER */
+  .hero-banner {
+    background: var(--ink);
+    color: white;
+    border-radius: 10px;
+    padding: 28px 32px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 32px;
+  }
+  .hero-left { display: flex; flex-direction: column; gap: 8px; }
+  .hero-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); }
+  .hero-amount { font-family: 'Instrument Serif', serif; font-size: 52px; letter-spacing: -2px; line-height: 1; }
+  .hero-sub { font-size: 13px; color: rgba(255,255,255,0.45); }
+  .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; padding: 4px 12px;
+    border-radius: 99px;
+  }
+  .badge-green { background: rgba(26,110,60,0.3); color: #7ad39f; }
+  .badge-amber { background: rgba(200,73,26,0.25); color: #f08060; }
+  .hero-right { display: flex; flex-direction: column; gap: 16px; min-width: 260px; }
+  .hero-stat-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.45); }
+  .hero-stat-value { font-family: 'DM Mono', monospace; font-size: 14px; color: white; }
+  .hero-divider { height: 1px; background: rgba(255,255,255,0.1); }
+
+  /* STAT GRID */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+  .stat-card {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+  }
+  .stat-label { font-size: 11px; font-weight: 500; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .stat-value { font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; line-height: 1; }
+  .stat-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .stat-sub.up { color: var(--green); }
+  .stat-sub.accent { color: var(--accent); }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--ink-3);
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* PAY PERIOD TABLE */
+  .pay-table { width: 100%; border-collapse: collapse; margin-bottom: 36px; }
+  .pay-table thead tr { border-bottom: 1.5px solid var(--ink); }
+  .pay-table th {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--ink-3);
+    padding: 0 12px 12px; text-align: right;
+  }
+  .pay-table th:first-child { text-align: left; padding-left: 0; }
+  .pay-table td { padding: 13px 12px; text-align: right; border-bottom: 1px solid var(--paper-3); font-size: 13px; }
+  .pay-table td:first-child { text-align: left; padding-left: 0; }
+  .pay-table tbody tr:hover { background: var(--paper-2); }
+  .period-name { font-weight: 500; }
+  .mono { font-family: 'DM Mono', monospace; }
+  .bar-cell { width: 140px; }
+  .mini-bar { height: 4px; background: var(--paper-3); border-radius: 99px; overflow: hidden; margin-top: 5px; }
+  .mini-bar-fill { height: 100%; border-radius: 99px; background: var(--accent); }
+  .bonus-badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 99px;
+    background: var(--green-light); color: var(--green);
+  }
+
+  /* BOTTOM GRID */
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 36px; }
+  .card { background: white; border: 1.5px solid var(--border); border-radius: 8px; padding: 22px 24px; }
+  .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-bottom: 18px; }
+
+  /* MEMBERSHIP BREAKDOWN */
+  .membership-bars { display: flex; flex-direction: column; gap: 10px; }
+  .mem-row { display: flex; align-items: center; gap: 12px; }
+  .mem-label { font-size: 12px; color: var(--ink-2); width: 80px; flex-shrink: 0; }
+  .mem-track { flex: 1; height: 22px; background: var(--paper-2); border-radius: 4px; overflow: hidden; }
+  .mem-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 10px; font-size: 11px; font-weight: 600; color: white; font-family: 'DM Mono', monospace; }
+  .mem-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-3); width: 32px; text-align: right; flex-shrink: 0; }
+
+  /* TRAINER TABLE */
+  .trainer-table { width: 100%; border-collapse: collapse; }
+  .trainer-table td { padding: 9px 0; font-size: 13px; border-bottom: 1px solid var(--paper-3); }
+  .trainer-table tr:last-child td { border-bottom: none; }
+  .trainer-table td:last-child { text-align: right; font-family: 'DM Mono', monospace; }
+  .trainer-rank { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-3); width: 24px; display: inline-block; }
+  .trainer-name { font-weight: 500; }
+  .fp-bar { height: 3px; background: var(--paper-3); border-radius: 99px; overflow: hidden; margin-top: 3px; width: 100px; display: inline-block; vertical-align: middle; margin-left: 8px; }
+  .fp-bar-fill { height: 100%; border-radius: 99px; background: var(--blue); }
+
+  /* FP RATE CARD */
+  .fp-rate-display { text-align: center; padding: 12px 0 20px; }
+  .fp-rate-big { font-family: 'Instrument Serif', serif; font-size: 56px; letter-spacing: -2px; color: var(--ink); line-height: 1; }
+  .fp-rate-label { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .fp-breakdown { display: flex; justify-content: space-around; padding-top: 16px; border-top: 1px solid var(--paper-3); margin-top: 16px; }
+  .fp-stat { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .fp-stat-val { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--ink); }
+  .fp-stat-lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+
+  /* MONTHLY TREND */
+  .trend-bars { display: flex; align-items: flex-end; gap: 8px; height: 80px; padding-top: 8px; }
+  .trend-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+  .trend-bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--ink); min-height: 4px; }
+  .trend-month { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--ink-3); text-transform: uppercase; }
+  .trend-val { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--ink-3); }
+
+  /* FOOTER */
+  .report-footer {
+    padding-top: 28px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer-brand { font-family: 'Instrument Serif', serif; font-size: 14px; color: var(--ink-3); }
+  .footer-brand span { color: var(--accent); font-style: italic; }
+  .footer-note { font-size: 11px; color: var(--ink-3); font-family: 'DM Mono', monospace; }
+
+  /* EXPORT BTN */
+  .export-btn {
+    position: fixed; top: 24px; right: 24px;
+    background: var(--ink); color: white; border: none; border-radius: 6px;
+    padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: 12px;
+    font-weight: 500; cursor: pointer; letter-spacing: 0.03em;
+    display: flex; align-items: center; gap: 7px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15); transition: opacity 0.15s; z-index: 100;
+  }
+  .export-btn:hover { opacity: 0.85; }
+  @media print { .export-btn { display: none; } .page { padding: 32px; } }
+</style>
+
+<div class="page">
+  <div class="report-header">
+    <div>
+      <div class="brand-name">Pipeline<span>IQ</span></div>
+      <div class="brand-sub">Sales Intelligence</div>
+    </div>
+    <div>
+      <div class="report-title">Commission Report</div>
+      <div class="report-period">Tyler &middot; GGIF &middot; ${escapeHtml(periodRangeLabel)}</div>
+    </div>
+  </div>
+
+  <div class="hero-banner">
+    <div class="hero-left">
+      <div class="hero-label">Total Commissions Earned</div>
+      <div class="hero-amount">${formatCurrency(report.totalRevenue)}</div>
+      <div class="hero-sub">Across ${report.payPeriods.length} pay periods &middot; ${report.totalSales} members sold</div>
+      <div class="hero-badges">
+        <span class="hero-badge badge-green">
+          <span style="width:5px;height:5px;border-radius:50%;background:#7ad39f;flex-shrink:0"></span>
+          ${report.totalFP} Fitness Profiles sold
+        </span>
+        <span class="hero-badge badge-amber">
+          <span style="width:5px;height:5px;border-radius:50%;background:#f08060;flex-shrink:0"></span>
+          ${report.cancellations} cancellations
+        </span>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hero-stat-row">
+        <span class="hero-stat-label">Avg commission / sale</span>
+        <span class="hero-stat-value">${formatCurrency(report.avgCommission)}</span>
+      </div>
+      <div class="hero-divider"></div>
+      <div class="hero-stat-row">
+        <span class="hero-stat-label">FP attach rate</span>
+        <span class="hero-stat-value">${formatPercent(report.fpRate)}</span>
+      </div>
+      <div class="hero-divider"></div>
+      <div class="hero-stat-row">
+        <span class="hero-stat-label">Best pay period</span>
+        <span class="hero-stat-value">${
+          report.bestPeriod
+            ? `${formatCurrency(report.bestPeriod.amount)} (${escapeHtml(report.bestPeriod.label)})`
+            : "-"
+        }</span>
+      </div>
+      <div class="hero-divider"></div>
+      <div class="hero-stat-row">
+        <span class="hero-stat-label">Top trainer assigned</span>
+        <span class="hero-stat-value">${
+          topTrainer ? `${escapeHtml(topTrainer.name)} (${topTrainer.count})` : "-"
+        }</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Members</div>
+      <div class="stat-value">${report.totalSales}</div>
+      <div class="stat-sub">sold this period</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Premium Sales</div>
+      <div class="stat-value">${report.membershipCounts.Premium}</div>
+      <div class="stat-sub up">${
+        report.totalSales > 0
+          ? `${formatPercent((report.membershipCounts.Premium / report.totalSales) * 100)} of all sales`
+          : "0.0% of all sales"
+      }</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">FP Attach Rate</div>
+      <div class="stat-value">${formatPercent(report.fpRate)}</div>
+      <div class="stat-sub">${report.totalFP} of ${report.totalSales} got a trainer</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Pay Period</div>
+      <div class="stat-value">${formatCurrency(avgPayPeriod)}</div>
+      <div class="stat-sub accent">${report.payPeriods.length} pay periods</div>
+    </div>
+  </div>
+
+  <div class="section-label">Pay Period Breakdown</div>
+  <table class="pay-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>Commission</th>
+        <th>Units</th>
+        <th>Bonus</th>
+        <th style="text-align:left;padding-left:12px">Trend</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${payPeriodRowsHTML}
+    </tbody>
+  </table>
+
+  <div class="bottom-grid">
+    <div class="card">
+      <div class="card-title">Sales by Membership Type</div>
+      <div class="membership-bars">
+        ${membershipRowsHTML}
+      </div>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--paper-3);display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3)">
+        <span>Top type: ${topMembershipType ? topMembershipType.type : "-"}</span>
+        <span style="font-family:'DM Mono',monospace">${trackedMembershipCount} total tracked</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fitness Profile Trainers Assigned</div>
+      <table class="trainer-table">
+        <tbody>
+          ${trainerRowsHTML}
+        </tbody>
+      </table>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--paper-3);font-size:11px;color:var(--ink-3);font-family:'DM Mono',monospace">
+        ${report.totalFP} total FPs across ${report.trainerCounts.length} trainers
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fitness Profile Attach Rate</div>
+      <div class="fp-rate-display">
+        <div class="fp-rate-big">${formatPercent(report.fpRate)}</div>
+        <div class="fp-rate-label">of new members also bought a Fitness Profile</div>
+      </div>
+      <div style="height:8px;background:var(--paper-2);border-radius:99px;overflow:hidden;margin:0 8px">
+        <div style="height:100%;width:${Math.min(Math.max(report.fpRate, 0), 100)}%;background:var(--accent);border-radius:99px"></div>
+      </div>
+      <div class="fp-breakdown">
+        <div class="fp-stat">
+          <div class="fp-stat-val">${report.totalFP}</div>
+          <div class="fp-stat-lab">With FP</div>
+        </div>
+        <div class="fp-stat">
+          <div class="fp-stat-val">${withoutFp}</div>
+          <div class="fp-stat-lab">Without FP</div>
+        </div>
+        <div class="fp-stat">
+          <div class="fp-stat-val" style="color:var(--green)">${formatCurrency(
+            report.totalFP > 0 ? report.totalBonuses / report.totalFP : 0
+          )}</div>
+          <div class="fp-stat-lab">FP Bonus</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Bonus Earnings</div>
+      <table class="trainer-table">
+        <tbody>
+          ${bonusRowsHTML}
+        </tbody>
+      </table>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--paper-3);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--ink-3)">Total bonuses earned</span>
+        <span style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--green)">+${formatCurrency(
+          report.totalBonuses
+        )}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-footer">
+    <div class="footer-brand">Pipeline<span>IQ</span></div>
+    <div class="footer-note">Generated ${generatedDate} &middot; Tyler &middot; GGIF Commissions</div>
+  </div>
+</div>`;
+  }, [report]);
 
   function parseFile(file: File) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setParseError("Please upload a .csv file.");
-      setRows([]);
+      setReport(null);
       setFileName("");
       return;
     }
 
     setParseError(null);
 
-    Papa.parse<CsvRecord>(file, {
-      header: true,
-      skipEmptyLines: true,
+    Papa.parse<CsvRawRow>(file, {
+      header: false,
+      skipEmptyLines: false,
       complete: (results) => {
-        const headers = (results.meta.fields ?? []).filter(Boolean);
+        const rawRows = (results.data ?? []).filter((row) => Array.isArray(row));
 
-        const repHeader = findHeader(headers, [
-          "rep_name",
-          "rep",
-          "sales_rep",
-          "name",
-        ]);
-        const revenueHeader = findHeader(headers, [
-          "revenue",
-          "sales",
-          "amount",
-          "bookings",
-        ]);
-        const quotaHeader = findHeader(headers, ["quota", "target", "goal"]);
-        const statusHeader = findHeader(headers, ["status", "health", "state"]);
-
-        if (!repHeader || !revenueHeader || !quotaHeader) {
-          setParseError(
-            "CSV must include rep name, revenue, and quota columns."
-          );
-          setRows([]);
+        if (rawRows.length === 0) {
+          setParseError("No valid rows found in this CSV.");
+          setReport(null);
           setFileName("");
           return;
         }
 
-        const parsedRows = (results.data ?? [])
-          .map((record) => {
-            const repName = String(record[repHeader] ?? "").trim();
-            if (!repName) return null;
+        const parsed = parseCommissionReport(rawRows);
 
-            const revenue = parseMoney(record[revenueHeader]);
-            const quota = parseMoney(record[quotaHeader]);
-            const rawStatus = statusHeader
-              ? String(record[statusHeader] ?? "").trim().toLowerCase()
-              : "";
-
-            let status: RepStatus;
-            if (rawStatus === "on track") {
-              status = "On Track";
-            } else if (rawStatus === "at risk") {
-              status = "At Risk";
-            } else if (rawStatus === "behind") {
-              status = "Behind";
-            } else {
-              status = deriveStatus(revenue, quota);
-            }
-
-            return {
-              repName,
-              revenue,
-              quota,
-              status,
-            };
-          })
-          .filter((row): row is ParsedRep => Boolean(row));
-
-        if (parsedRows.length === 0) {
-          setParseError("No valid rows found. Add at least one rep row.");
-          setRows([]);
+        if (parsed.totalSales === 0 && parsed.payPeriods.length === 0) {
+          setParseError("No commission data found after applying parsing rules.");
+          setReport(null);
           setFileName("");
           return;
         }
 
-        setRows(parsedRows);
+        setReport(parsed);
         setFileName(file.name);
       },
       error: (error) => {
         setParseError(`Unable to parse CSV: ${error.message}`);
-        setRows([]);
+        setReport(null);
         setFileName("");
       },
     });
@@ -220,8 +898,8 @@ export function ReportUploader() {
     if (file) parseFile(file);
   }
 
-  async function generatePdf() {
-    if (rows.length === 0 || isGenerating) return;
+  async function exportPdf() {
+    if (!report || isGenerating) return;
 
     setIsGenerating(true);
 
@@ -232,156 +910,93 @@ export function ReportUploader() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 14;
-      const usableWidth = pageWidth - margin * 2;
-
-      const drawBackground = () => {
-        doc.setFillColor(COLORS.paper[0], COLORS.paper[1], COLORS.paper[2]);
-        doc.rect(0, 0, pageWidth, pageHeight, "F");
-      };
+      let y = 18;
 
       const drawFooter = () => {
-        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
-        doc.text("PipelineIQ • Generated from CSV", pageWidth / 2, pageHeight - 7, {
-          align: "center",
-        });
+        doc.setTextColor(120, 120, 120);
+        doc.text(
+          `PipelineIQ - Generated ${new Date().toLocaleDateString("en-US")}`,
+          pageWidth / 2,
+          pageHeight - 8,
+          { align: "center" }
+        );
       };
 
-      const drawTableHeader = (y: number) => {
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
-        doc.roundedRect(margin, y, usableWidth, 9, 1.5, 1.5, "FD");
+      doc.setFillColor(247, 245, 240);
+      doc.rect(0, 0, pageWidth, pageHeight, "F");
 
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8.5);
-        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
-
-        doc.text("REP", margin + 4, y + 5.7);
-        doc.text("REVENUE", margin + 84, y + 5.7);
-        doc.text("QUOTA", margin + 118, y + 5.7);
-        doc.text("STATUS", margin + 150, y + 5.7);
-      };
-
-      drawBackground();
-
-      doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
+      doc.setTextColor(15, 15, 15);
       doc.setFont("times", "normal");
       doc.setFontSize(24);
-      doc.text("PipelineIQ Performance Report", margin, 22);
+      doc.text("Commission Report", margin, y);
+
+      y += 6;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(90, 90, 90);
+      doc.text(`Source: ${fileName || "Uploaded CSV"}`, margin, y);
+
+      y += 10;
+      doc.setTextColor(15, 15, 15);
+      doc.setFontSize(12);
+      doc.text(`Total Commissions: ${formatCurrency(report.totalRevenue)}`, margin, y);
+      y += 6;
+      doc.text(`Total Sales: ${report.totalSales}`, margin, y);
+      y += 6;
+      doc.text(`FP Attach Rate: ${formatPercent(report.fpRate)}`, margin, y);
+      y += 6;
+      doc.text(`Avg Commission / Sale: ${formatCurrency(report.avgCommission)}`, margin, y);
+      y += 6;
+      doc.text(`Total Bonuses: ${formatCurrency(report.totalBonuses)}`, margin, y);
+
+      y += 10;
+      doc.setFont("helvetica", "bold");
+      doc.text("Pay Periods", margin, y);
+      y += 6;
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
-      doc.text(
-        `Source: ${fileName || "Uploaded CSV"} • ${new Date().toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        })}`,
-        margin,
-        28
-      );
 
-      doc.setDrawColor(COLORS.green[0], COLORS.green[1], COLORS.green[2]);
-      doc.setLineWidth(0.8);
-      doc.line(margin, 33, pageWidth - margin, 33);
-
-      const cards = [
-        {
-          label: "Team Revenue",
-          value: formatCurrency(totals.teamRevenue),
-          hint: `${rows.length} reps`,
-        },
-        {
-          label: "Team Quota",
-          value: formatCurrency(totals.teamQuota),
-          hint: "Monthly target",
-        },
-        {
-          label: "Attainment",
-          value: formatPercent(totals.attainment),
-          hint: "Revenue / quota",
-        },
-        {
-          label: "On Track",
-          value: `${totals.onTrackCount}`,
-          hint: "Reps above plan",
-        },
-      ];
-
-      const cardGap = 6;
-      const cardWidth = (usableWidth - cardGap) / 2;
-      const cardHeight = 22;
-      const firstCardY = 38;
-
-      cards.forEach((card, index) => {
-        const col = index % 2;
-        const row = Math.floor(index / 2);
-        const x = margin + col * (cardWidth + cardGap);
-        const y = firstCardY + row * (cardHeight + 5);
-
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
-        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, "FD");
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
-        doc.text(card.label, x + 3.5, y + 5.5);
-
-        doc.setFont("times", "normal");
-        doc.setFontSize(14);
-        doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
-        doc.text(card.value, x + 3.5, y + 13.5);
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(COLORS.green[0], COLORS.green[1], COLORS.green[2]);
-        doc.text(card.hint, x + 3.5, y + 19);
-      });
-
-      let y = firstCardY + cardHeight * 2 + 16;
-      drawTableHeader(y);
-      y += 11;
-
-      for (const row of rows) {
+      for (const period of report.payPeriods) {
         if (y > pageHeight - 20) {
           drawFooter();
           doc.addPage();
-          drawBackground();
-
-          doc.setFont("times", "normal");
-          doc.setFontSize(16);
-          doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
-          doc.text("Rep Performance (continued)", margin, 18);
-
-          y = 24;
-          drawTableHeader(y);
-          y += 11;
+          doc.setFillColor(247, 245, 240);
+          doc.rect(0, 0, pageWidth, pageHeight, "F");
+          y = 16;
         }
 
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
-        doc.roundedRect(margin, y - 6.2, usableWidth, 8.4, 1.2, 1.2, "FD");
+        doc.text(period.label, margin, y);
+        doc.text(formatCurrency(period.amount), margin + 86, y);
+        doc.text(formatUnits(period.units), margin + 122, y);
+        doc.text(period.bonus > 0 ? `+${formatCurrency(period.bonus)}` : "-", margin + 150, y);
+        y += 5.5;
+      }
 
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
-        doc.text(row.repName, margin + 4, y - 0.5);
-        doc.text(formatCurrency(row.revenue), margin + 84, y - 0.5);
-        doc.text(formatCurrency(row.quota), margin + 118, y - 0.5);
+      y += 4;
+      doc.setFont("helvetica", "bold");
+      doc.text("Top Trainers", margin, y);
+      y += 6;
+      doc.setFont("helvetica", "normal");
 
-        const statusColor = getStatusRgb(row.status);
-        doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-        doc.text(row.status, margin + 150, y - 0.5);
+      for (const trainer of report.trainerCounts.slice(0, 10)) {
+        if (y > pageHeight - 20) {
+          drawFooter();
+          doc.addPage();
+          doc.setFillColor(247, 245, 240);
+          doc.rect(0, 0, pageWidth, pageHeight, "F");
+          y = 16;
+        }
 
-        y += 10;
+        doc.text(trainer.name, margin, y);
+        doc.text(`${trainer.count} FPs`, margin + 80, y);
+        y += 5.5;
       }
 
       drawFooter();
-
-      const safeName = sanitizeFileName(fileName) || "pipelineiq-report";
+      const safeName = sanitizeFileName(fileName) || "commission-report";
       doc.save(`${safeName}.pdf`);
     } finally {
       setIsGenerating(false);
@@ -389,160 +1004,97 @@ export function ReportUploader() {
   }
 
   return (
-    <section className="rounded-3xl border border-[#d8d5ce] bg-[#f9f5eb] p-6 text-[#1a1a1a] shadow-[0_22px_48px_rgba(26,26,26,0.08)] sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.11em] text-[#5a5a5a]">
-            CSV to PDF
-          </p>
-          <h2 className="mt-2 font-serif text-4xl leading-tight">
-            Upload sales data and export a beautiful report
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm text-[#444]">
-            Drag in any CSV with rep name, revenue, and quota. We parse it,
-            preview it instantly, then generate a polished PDF in the PipelineIQ
-            paper + ink style.
-          </p>
-        </div>
-      </div>
+    <section
+      className="relative min-h-screen bg-[#f7f5f0] px-4 pb-32 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+    >
+      <div className="mx-auto w-full max-w-[960px] space-y-6">
+        <div className="rounded-2xl border border-[#d8d5ce] bg-white p-6 shadow-[0_16px_36px_rgba(15,15,15,0.06)]">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={onInputChange}
+          />
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={onInputChange}
-      />
-
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            fileInputRef.current?.click();
-          }
-        }}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          setIsDragging(false);
-        }}
-        onDrop={onDrop}
-        className={`mt-7 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
-          isDragging
-            ? "border-[#1a6e3c] bg-[#e4f2ea]"
-            : "border-[#cfcabf] bg-white hover:bg-[#f4efe3]"
-        }`}
-      >
-        <div className="mx-auto flex max-w-md flex-col items-center">
-          <Upload className="h-12 w-12 text-[#1a1a1a]" />
-          <p className="mt-4 text-lg font-medium">Drag and drop your CSV</p>
-          <p className="mt-2 text-sm text-[#5b5b5b]">or click to select a file</p>
-          <span className="mt-4 inline-flex items-center rounded-full bg-[#e2f0e8] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
-            .csv only
-          </span>
-        </div>
-      </div>
-
-      {fileName ? (
-        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d8d5ce] bg-white px-3 py-1.5 text-sm text-[#404040]">
-          <FileSpreadsheet className="h-4 w-4 text-[#1a6e3c]" />
-          {fileName}
-        </div>
-      ) : null}
-
-      {parseError ? (
-        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {parseError}
-        </p>
-      ) : null}
-
-      {rows.length > 0 ? (
-        <div className="mt-7 space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Team Revenue</p>
-              <p className="mt-2 font-serif text-2xl">{formatCurrency(totals.teamRevenue)}</p>
-            </div>
-            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Team Quota</p>
-              <p className="mt-2 font-serif text-2xl">{formatCurrency(totals.teamQuota)}</p>
-            </div>
-            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Attainment</p>
-              <p className="mt-2 font-serif text-2xl">{formatPercent(totals.attainment)}</p>
-            </div>
-            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">On Track Reps</p>
-              <p className="mt-2 font-serif text-2xl">
-                {totals.onTrackCount}/{rows.length}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={onDrop}
+            className={`rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+              isDragging
+                ? "border-[#1a6e3c] bg-[#edf7f1]"
+                : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
+            }`}
+          >
+            <div className="mx-auto flex max-w-md flex-col items-center">
+              <Upload className="h-12 w-12 text-[#1a1a1a]" />
+              <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
+              <p className="mt-2 text-sm text-[#5b5b5b]">
+                We parse commission summaries and render a styled report
               </p>
+              <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
+                .csv only
+              </span>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-[#d8d5ce] bg-white">
-            <div className="border-b border-[#d8d5ce] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Live Preview</p>
+          {fileName ? (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d8d5ce] bg-white px-3 py-1.5 text-sm text-[#404040]">
+              <FileSpreadsheet className="h-4 w-4 text-[#1a6e3c]" />
+              {fileName}
             </div>
+          ) : null}
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-[#d8d5ce] bg-[#f6f1e7] text-left text-xs uppercase tracking-[0.08em] text-[#6a6a6a]">
-                    <th className="px-4 py-3">Rep</th>
-                    <th className="px-4 py-3">Revenue</th>
-                    <th className="px-4 py-3">Quota</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={`${row.repName}-${index}`} className="border-b border-[#ece8dc] last:border-b-0">
-                      <td className="px-4 py-3 font-medium text-[#1a1a1a]">{row.repName}</td>
-                      <td className="px-4 py-3 font-mono text-[#1a1a1a]">{formatCurrency(row.revenue)}</td>
-                      <td className="px-4 py-3 font-mono text-[#1a1a1a]">{formatCurrency(row.quota)}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(
-                            row.status
-                          )}`}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {parseError ? (
+            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {parseError}
+            </p>
+          ) : null}
+        </div>
 
+        {report ? <div dangerouslySetInnerHTML={{ __html: reportHTML }} /> : null}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#232323] bg-[#0f0f0f] px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[960px]">
           <Button
             type="button"
-            disabled={isGenerating}
-            onClick={generatePdf}
-            className="h-12 w-full bg-[#1a6e3c] text-sm font-semibold text-white hover:bg-[#14552f]"
+            disabled={isGenerating || !report}
+            onClick={exportPdf}
+            className="h-12 w-full border border-[#2f2f2f] bg-[#0f0f0f] text-sm font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
           >
             {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating PDF...
+                Exporting PDF...
               </>
             ) : (
-              "Generate PDF"
+              "Export PDF"
             )}
           </Button>
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }

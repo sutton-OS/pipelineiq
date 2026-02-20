@@ -28,6 +28,7 @@ import {
 type Step = "upload" | "map" | "preview" | "done"
 type PeriodType = "weekly" | "monthly"
 type CsvRow = Record<string, unknown>
+type CsvRawRow = string[]
 type RequiredField = "rep_name" | "revenue" | "quota"
 type OptionalField =
   | "role"
@@ -72,7 +73,7 @@ const optionalFieldMeta: Array<{ key: OptionalField; label: string }> = [
   { key: "emails", label: "Emails" },
   { key: "demos", label: "Demos" },
   { key: "leads", label: "Leads" },
-  { key: "contacts", label: "Contacts" },
+  { key: "contacts", label: "Contacted" },
   { key: "qualified", label: "Qualified" },
   { key: "avg_deal_size", label: "Avg Deal Size" },
   { key: "avg_days_to_close", label: "Avg Days to Close" },
@@ -92,6 +93,11 @@ const optionalNumericFields: NumericOptionalField[] = [
 
 const allFields = [...requiredFieldMeta, ...optionalFieldMeta]
 const UNMAPPED = "__unmapped__"
+const requiredFieldKeywords: Record<RequiredField, string[]> = {
+  rep_name: ["name", "rep", "agent", "trainer", "salesperson", "member"],
+  revenue: ["commission", "revenue", "amount", "total", "sales", "arr"],
+  quota: ["quota", "target", "goal"],
+}
 
 function monthName(date: Date) {
   return new Intl.DateTimeFormat("en-US", { month: "long" }).format(date)
@@ -102,10 +108,6 @@ function toDateInputValue(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
-}
-
-function normalizeHeader(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
 }
 
 function toNumber(value: unknown) {
@@ -122,39 +124,85 @@ function formatCellValue(value: unknown) {
   return String(value)
 }
 
-function getInitialMappings(headers: string[]): Record<FieldKey, string> {
-  const normalizedToOriginal = new Map<string, string>(
-    headers.map((header) => [normalizeHeader(header), header])
-  )
-
-  const aliases: Record<FieldKey, string[]> = {
-    rep_name: ["rep_name", "rep", "name", "sales_rep", "repname"],
-    revenue: ["revenue", "sales", "amount", "arr", "mrr"],
-    quota: ["quota", "target", "goal"],
-    role: ["role", "title", "position"],
-    deals_closed: ["deals_closed", "deals", "closed_deals"],
-    calls: ["calls", "call_count"],
-    emails: ["emails", "email_count"],
-    demos: ["demos", "demo_count"],
-    leads: ["leads", "lead_count"],
-    contacts: ["contacts", "contact_count"],
-    qualified: ["qualified", "qualified_leads"],
-    avg_deal_size: ["avg_deal_size", "average_deal_size"],
-    avg_days_to_close: ["avg_days_to_close", "days_to_close"],
-  }
-
-  const mappings = Object.fromEntries(
+function getEmptyMappings(): Record<FieldKey, string> {
+  return Object.fromEntries(
     allFields.map(({ key }) => [key, ""])
   ) as Record<FieldKey, string>
+}
 
-  for (const { key } of allFields) {
-    const match = aliases[key]
-      .map((alias) => normalizedToOriginal.get(alias))
-      .find(Boolean)
-    mappings[key] = match ?? ""
+function countNonEmptyValues(values: unknown[]) {
+  return values.filter((value) => String(value ?? "").trim() !== "").length
+}
+
+function dedupeHeader(header: string, seen: Map<string, number>) {
+  const count = seen.get(header) ?? 0
+  seen.set(header, count + 1)
+  return count === 0 ? header : `${header} (${count + 1})`
+}
+
+function buildHeaders(rawHeaderRow: CsvRawRow) {
+  const seen = new Map<string, number>()
+  return rawHeaderRow.map((value, index) => {
+    const cleaned = value.trim() || `Column ${index + 1}`
+    return dedupeHeader(cleaned, seen)
+  })
+}
+
+function normalizeHeader(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function scoreHeaderMatch(header: string, keywords: string[]) {
+  const normalized = normalizeHeader(header)
+  if (!normalized) return 0
+
+  let bestScore = 0
+  for (const keyword of keywords) {
+    if (normalized === keyword) bestScore = Math.max(bestScore, 100)
+    else if (
+      normalized.startsWith(`${keyword} `) ||
+      normalized.endsWith(` ${keyword}`) ||
+      normalized.includes(` ${keyword} `)
+    ) {
+      bestScore = Math.max(bestScore, 80)
+    } else if (normalized.includes(keyword)) {
+      bestScore = Math.max(bestScore, 60)
+    }
+  }
+
+  return bestScore
+}
+
+function getSuggestedMappings(headers: string[]) {
+  const mappings = getEmptyMappings()
+  const usedHeaders = new Set<string>()
+
+  for (const { key } of requiredFieldMeta) {
+    let bestHeader = ""
+    let bestScore = 0
+
+    for (const header of headers) {
+      if (usedHeaders.has(header)) continue
+      const score = scoreHeaderMatch(header, requiredFieldKeywords[key])
+      if (score > bestScore) {
+        bestScore = score
+        bestHeader = header
+      }
+    }
+
+    if (bestHeader) {
+      mappings[key] = bestHeader
+      usedHeaders.add(bestHeader)
+    }
   }
 
   return mappings
+}
+
+function buildParsedRows(rawRows: CsvRawRow[], headers: string[]) {
+  return rawRows.map((rawRow) =>
+    Object.fromEntries(headers.map((header, index) => [header, rawRow[index] ?? ""]))
+  ) as CsvRow[]
 }
 
 export function UploadFlow() {
@@ -171,12 +219,7 @@ export function UploadFlow() {
   const [reportId, setReportId] = useState<string | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<CsvRow[]>([])
-  const [mappings, setMappings] = useState<Record<FieldKey, string>>(
-    Object.fromEntries(allFields.map(({ key }) => [key, ""])) as Record<
-      FieldKey,
-      string
-    >
-  )
+  const [mappings, setMappings] = useState<Record<FieldKey, string>>(getEmptyMappings())
   const [reportName, setReportName] = useState(`Monthly Report — ${monthName(now)}`)
   const [periodType, setPeriodType] = useState<PeriodType>("monthly")
   const [periodStart, setPeriodStart] = useState(toDateInputValue(firstOfMonth))
@@ -235,21 +278,33 @@ export function UploadFlow() {
     resetImportState()
     setUploadedFileName(file.name)
 
-    Papa.parse<CsvRow>(file, {
-      header: true,
+    Papa.parse<CsvRawRow>(file, {
+      header: false,
       skipEmptyLines: true,
       complete: (results) => {
-        const parsedRows = results.data ?? []
-        const parsedHeaders = (results.meta.fields ?? []).filter(Boolean)
-
-        if (!parsedRows.length || !parsedHeaders.length) {
-          setParseError("No CSV rows were detected. Please check your file.")
+        const rawRows = (results.data ?? []).filter((row) => Array.isArray(row))
+        if (rawRows.length === 0) {
+          setParseError("No CSV data rows were detected. Please check your file.")
           return
         }
 
+        const shouldSkipTitleRow = rawRows.length > 1 && countNonEmptyValues(rawRows[0]) <= 2
+        const headerRowIndex = shouldSkipTitleRow ? 1 : 0
+        const headerRow = rawRows[headerRowIndex]
+        const parsedHeaders = buildHeaders(headerRow)
+        const dataRows = rawRows.slice(headerRowIndex + 1)
+        const nonEmptyDataRows = dataRows.filter((row) => countNonEmptyValues(row) > 0)
+
+        if (nonEmptyDataRows.length === 0) {
+          setParseError("No CSV data rows were detected. Please check your file.")
+          return
+        }
+
+        const parsedRows = buildParsedRows(nonEmptyDataRows, parsedHeaders)
+
         setRows(parsedRows)
         setHeaders(parsedHeaders)
-        setMappings(getInitialMappings(parsedHeaders))
+        setMappings(getSuggestedMappings(parsedHeaders))
         setStep("map")
       },
       error: (error) => {
@@ -416,6 +471,13 @@ export function UploadFlow() {
                         ))}
                       </SelectContent>
                     </Select>
+
+                    <p className="text-xs text-[var(--ink-3)]">
+                      Preview:{" "}
+                      <span className="font-medium text-[var(--ink)]">
+                        {formatCellValue(rows[0]?.[mappings[key]])}
+                      </span>
+                    </p>
                   </div>
                 ))}
               </div>
