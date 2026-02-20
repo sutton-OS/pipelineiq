@@ -1,11 +1,11 @@
 export default function RootLoading() {
   return (
-    <main className="grid min-h-screen place-items-center bg-paper px-6">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-paper-2/60 p-8 text-center shadow-sm">
-        <div className="mx-auto mb-5 h-14 w-14 rounded-full border-2 border-paper-3 border-t-accent animate-spin" />
-        <p className="font-serif text-2xl text-ink">Preparing your report</p>
-        <p className="mt-2 text-sm text-ink-2">
-          Aligning data on fresh paper and warming up the press.
+    <main className="grid min-h-screen place-items-center bg-[#f9f5eb] px-6 text-[#1a1a1a]">
+      <div className="w-full max-w-md rounded-2xl border border-[#d8d5ce] bg-white p-8 text-center shadow-[0_16px_36px_rgba(26,26,26,0.08)]">
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-[#e0ddd6] border-t-[#1a6e3c]" />
+        <h1 className="mt-5 font-serif text-3xl">Preparing your report</h1>
+        <p className="mt-2 text-sm text-[#4a4a4a]">
+          Warming up the paper, ink, and numbers.
         </p>
       </div>
     </main>

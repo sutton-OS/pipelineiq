@@ -1,63 +1,66 @@
-"use client"
+"use client";
 
-import { useMemo, useRef, useState } from "react"
-import Papa from "papaparse"
-import { Loader2, Upload } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { useMemo, useRef, useState } from "react";
+import Papa from "papaparse";
+import { FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-type CsvRecord = Record<string, unknown>
+type CsvRecord = Record<string, unknown>;
+
+type RepStatus = "On Track" | "At Risk" | "Behind";
 
 type ParsedRep = {
-  repName: string
-  revenue: number
-  quota: number
-  status: "On Track" | "At Risk" | "Behind"
-}
+  repName: string;
+  revenue: number;
+  quota: number;
+  status: RepStatus;
+};
 
-const PAPER_RGB = [249, 245, 235] as const
-const INK_RGB = [26, 26, 26] as const
-const GREEN_RGB = [22, 101, 52] as const
-const BORDER_RGB = [220, 213, 196] as const
+const COLORS = {
+  paper: [249, 245, 235] as const,
+  ink: [26, 26, 26] as const,
+  inkMuted: [88, 88, 88] as const,
+  border: [216, 213, 206] as const,
+  green: [26, 110, 60] as const,
+  amber: [176, 125, 0] as const,
+  red: [197, 34, 31] as const,
+};
 
 function normalizeHeader(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 function findHeader(headers: string[], aliases: string[]) {
-  const map = new Map(headers.map((header) => [normalizeHeader(header), header]))
+  const headerMap = new Map(
+    headers.map((header) => [normalizeHeader(header), header])
+  );
 
   for (const alias of aliases) {
-    const match = map.get(alias)
-    if (match) return match
+    const match = headerMap.get(alias);
+    if (match) return match;
   }
 
-  return null
+  return null;
 }
 
-function parseNumber(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value === "string") {
-    const cleaned = value.replace(/[$,%\s,]/g, "")
-    const parsed = Number.parseFloat(cleaned)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  return 0
+function parseMoney(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return 0;
+
+  const cleaned = value.replace(/[$,%\s,]/g, "");
+  const parsed = Number.parseFloat(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function deriveStatus(revenue: number, quota: number): ParsedRep["status"] {
-  const attainment = quota > 0 ? revenue / quota : 0
-  if (attainment >= 1) return "On Track"
-  if (attainment >= 0.85) return "At Risk"
-  return "Behind"
+function deriveStatus(revenue: number, quota: number): RepStatus {
+  const attainment = quota > 0 ? revenue / quota : 0;
+
+  if (attainment >= 1) return "On Track";
+  if (attainment >= 0.85) return "At Risk";
+  return "Behind";
 }
 
 function formatCurrency(value: number) {
@@ -65,186 +68,224 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(value);
 }
 
-function statusPillClasses(status: ParsedRep["status"]) {
-  if (status === "On Track") return "bg-green-100 text-green-800"
-  if (status === "At Risk") return "bg-amber-100 text-amber-800"
-  return "bg-red-100 text-red-800"
+function formatPercent(value: number) {
+  return `${Math.round(value)}%`;
 }
 
-function sanitizeFileName(name: string) {
-  return name
+function sanitizeFileName(value: string) {
+  return value
     .toLowerCase()
     .replace(/\.csv$/i, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getStatusClass(status: RepStatus) {
+  if (status === "On Track") return "bg-[#e2f0e8] text-[#1a6e3c]";
+  if (status === "At Risk") return "bg-[#fdf4d8] text-[#b07d00]";
+  return "bg-[#fce8e6] text-[#c5221f]";
+}
+
+function getStatusRgb(status: RepStatus) {
+  if (status === "On Track") return COLORS.green;
+  if (status === "At Risk") return COLORS.amber;
+  return COLORS.red;
 }
 
 export function ReportUploader() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isDragging, setIsDragging] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [fileName, setFileName] = useState("")
-  const [parseError, setParseError] = useState<string | null>(null)
-  const [rows, setRows] = useState<ParsedRep[]>([])
+  const [isDragging, setIsDragging] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [rows, setRows] = useState<ParsedRep[]>([]);
 
   const totals = useMemo(() => {
-    const teamRevenue = rows.reduce((sum, row) => sum + row.revenue, 0)
-    const teamQuota = rows.reduce((sum, row) => sum + row.quota, 0)
-    const attainment = teamQuota > 0 ? (teamRevenue / teamQuota) * 100 : 0
-    const onTrackCount = rows.filter((row) => row.status === "On Track").length
-    const avgRepRevenue = rows.length > 0 ? teamRevenue / rows.length : 0
+    const teamRevenue = rows.reduce((sum, row) => sum + row.revenue, 0);
+    const teamQuota = rows.reduce((sum, row) => sum + row.quota, 0);
+    const attainment = teamQuota > 0 ? (teamRevenue / teamQuota) * 100 : 0;
 
     return {
       teamRevenue,
       teamQuota,
       attainment,
-      onTrackCount,
-      avgRepRevenue,
-    }
-  }, [rows])
+      onTrackCount: rows.filter((row) => row.status === "On Track").length,
+      avgRevenue: rows.length > 0 ? teamRevenue / rows.length : 0,
+    };
+  }, [rows]);
 
   function parseFile(file: File) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
-      setParseError("Only .csv files are supported.")
-      return
+      setParseError("Please upload a .csv file.");
+      setRows([]);
+      setFileName("");
+      return;
     }
 
-    setParseError(null)
+    setParseError(null);
 
     Papa.parse<CsvRecord>(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const headers = (results.meta.fields ?? []).filter(Boolean)
+        const headers = (results.meta.fields ?? []).filter(Boolean);
 
-        const repHeader = findHeader(headers, ["rep_name", "rep", "name", "sales_rep", "repname"])
-        const revenueHeader = findHeader(headers, ["revenue", "sales", "amount", "arr", "mrr"])
-        const quotaHeader = findHeader(headers, ["quota", "target", "goal"])
-        const statusHeader = findHeader(headers, ["status", "health", "state"])
+        const repHeader = findHeader(headers, [
+          "rep_name",
+          "rep",
+          "sales_rep",
+          "name",
+        ]);
+        const revenueHeader = findHeader(headers, [
+          "revenue",
+          "sales",
+          "amount",
+          "bookings",
+        ]);
+        const quotaHeader = findHeader(headers, ["quota", "target", "goal"]);
+        const statusHeader = findHeader(headers, ["status", "health", "state"]);
 
         if (!repHeader || !revenueHeader || !quotaHeader) {
-          setParseError("CSV must include columns for rep name, revenue, and quota.")
-          setRows([])
-          setFileName("")
-          return
+          setParseError(
+            "CSV must include rep name, revenue, and quota columns."
+          );
+          setRows([]);
+          setFileName("");
+          return;
         }
 
         const parsedRows = (results.data ?? [])
           .map((record) => {
-            const repName = String(record[repHeader] ?? "").trim()
-            const revenue = parseNumber(record[revenueHeader])
-            const quota = parseNumber(record[quotaHeader])
-            const rawStatus = statusHeader ? String(record[statusHeader] ?? "").trim() : ""
+            const repName = String(record[repHeader] ?? "").trim();
+            if (!repName) return null;
 
-            if (!repName) return null
+            const revenue = parseMoney(record[revenueHeader]);
+            const quota = parseMoney(record[quotaHeader]);
+            const rawStatus = statusHeader
+              ? String(record[statusHeader] ?? "").trim().toLowerCase()
+              : "";
 
-            const normalizedStatus = rawStatus.toLowerCase()
-            const status: ParsedRep["status"] =
-              normalizedStatus === "on track"
-                ? "On Track"
-                : normalizedStatus === "at risk"
-                  ? "At Risk"
-                  : normalizedStatus === "behind"
-                    ? "Behind"
-                    : deriveStatus(revenue, quota)
+            let status: RepStatus;
+            if (rawStatus === "on track") {
+              status = "On Track";
+            } else if (rawStatus === "at risk") {
+              status = "At Risk";
+            } else if (rawStatus === "behind") {
+              status = "Behind";
+            } else {
+              status = deriveStatus(revenue, quota);
+            }
 
             return {
               repName,
               revenue,
               quota,
               status,
-            }
+            };
           })
-          .filter((row): row is ParsedRep => Boolean(row))
+          .filter((row): row is ParsedRep => Boolean(row));
 
         if (parsedRows.length === 0) {
-          setParseError("No valid rows found. Ensure your CSV has rep names.")
-          setRows([])
-          setFileName("")
-          return
+          setParseError("No valid rows found. Add at least one rep row.");
+          setRows([]);
+          setFileName("");
+          return;
         }
 
-        setRows(parsedRows)
-        setFileName(file.name)
+        setRows(parsedRows);
+        setFileName(file.name);
       },
       error: (error) => {
-        setParseError(`Unable to parse CSV: ${error.message}`)
-        setRows([])
-        setFileName("")
+        setParseError(`Unable to parse CSV: ${error.message}`);
+        setRows([]);
+        setFileName("");
       },
-    })
+    });
   }
 
-  function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    parseFile(file)
+  function onDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) parseFile(file);
+  }
+
+  function onInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) parseFile(file);
   }
 
   async function generatePdf() {
-    if (rows.length === 0 || isGenerating) return
+    if (rows.length === 0 || isGenerating) return;
 
-    setIsGenerating(true)
+    setIsGenerating(true);
 
     try {
-      const { default: JsPDF } = await import("jspdf")
-      const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
-      const margin = 14
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      const usableWidth = pageWidth - margin * 2;
 
-      const fontList = doc.getFontList() as Record<string, string[]>
-      const sansFont = fontList["DM Sans"] ? "DM Sans" : "helvetica"
-      const serifFont = fontList["Instrument Serif"] ? "Instrument Serif" : "times"
-
-      const drawPageBackground = () => {
-        doc.setFillColor(PAPER_RGB[0], PAPER_RGB[1], PAPER_RGB[2])
-        doc.rect(0, 0, pageWidth, pageHeight, "F")
-      }
+      const drawBackground = () => {
+        doc.setFillColor(COLORS.paper[0], COLORS.paper[1], COLORS.paper[2]);
+        doc.rect(0, 0, pageWidth, pageHeight, "F");
+      };
 
       const drawFooter = () => {
-        doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
-        doc.setFont(sansFont, "normal")
-        doc.setFontSize(9)
-        doc.text(
-          "Generated by PipelineIQ — Beautiful sales reporting",
-          pageWidth / 2,
-          pageHeight - 8,
-          { align: "center" }
-        )
-      }
+        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text("PipelineIQ • Generated from CSV", pageWidth / 2, pageHeight - 7, {
+          align: "center",
+        });
+      };
 
       const drawTableHeader = (y: number) => {
-        doc.setFillColor(232, 242, 234)
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 9, 1.5, 1.5, "F")
-        doc.setDrawColor(BORDER_RGB[0], BORDER_RGB[1], BORDER_RGB[2])
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 9, 1.5, 1.5)
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
+        doc.roundedRect(margin, y, usableWidth, 9, 1.5, 1.5, "FD");
 
-        doc.setFont(sansFont, "bold")
-        doc.setFontSize(9)
-        doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
 
-        doc.text("Rep Name", margin + 4, y + 5.8)
-        doc.text("Revenue", margin + 76, y + 5.8)
-        doc.text("Quota", margin + 112, y + 5.8)
-        doc.text("Status", margin + 144, y + 5.8)
-      }
+        doc.text("REP", margin + 4, y + 5.7);
+        doc.text("REVENUE", margin + 84, y + 5.7);
+        doc.text("QUOTA", margin + 118, y + 5.7);
+        doc.text("STATUS", margin + 150, y + 5.7);
+      };
 
-      drawPageBackground()
+      drawBackground();
 
-      doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
-      doc.setFont(serifFont, "normal")
-      doc.setFontSize(20)
-      doc.text("April Performance Snapshot • PipelineIQ", margin, 20)
+      doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
+      doc.setFont("times", "normal");
+      doc.setFontSize(24);
+      doc.text("PipelineIQ Performance Report", margin, 22);
 
-      doc.setFont(sansFont, "normal")
-      doc.setFontSize(9)
-      doc.text(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), margin, 26)
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
+      doc.text(
+        `Source: ${fileName || "Uploaded CSV"} • ${new Date().toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        })}`,
+        margin,
+        28
+      );
+
+      doc.setDrawColor(COLORS.green[0], COLORS.green[1], COLORS.green[2]);
+      doc.setLineWidth(0.8);
+      doc.line(margin, 33, pageWidth - margin, 33);
 
       const cards = [
         {
@@ -258,205 +299,250 @@ export function ReportUploader() {
           hint: "Monthly target",
         },
         {
-          label: "Goal Attainment",
-          value: `${Math.round(totals.attainment)}%`,
-          hint: "Revenue vs quota",
+          label: "Attainment",
+          value: formatPercent(totals.attainment),
+          hint: "Revenue / quota",
         },
         {
-          label: "Avg Rep Revenue",
-          value: formatCurrency(totals.avgRepRevenue),
-          hint: `${totals.onTrackCount}/${rows.length} on track`,
+          label: "On Track",
+          value: `${totals.onTrackCount}`,
+          hint: "Reps above plan",
         },
-      ]
+      ];
 
-      const cardWidth = (pageWidth - margin * 2 - 8) / 2
-      const cardHeight = 24
-      let cardY = 34
+      const cardGap = 6;
+      const cardWidth = (usableWidth - cardGap) / 2;
+      const cardHeight = 22;
+      const firstCardY = 38;
 
       cards.forEach((card, index) => {
-        const col = index % 2
-        const row = Math.floor(index / 2)
-        const x = margin + col * (cardWidth + 8)
-        const y = cardY + row * (cardHeight + 6)
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = margin + col * (cardWidth + cardGap);
+        const y = firstCardY + row * (cardHeight + 5);
 
-        doc.setFillColor(255, 255, 255)
-        doc.setDrawColor(BORDER_RGB[0], BORDER_RGB[1], BORDER_RGB[2])
-        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, "FD")
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, "FD");
 
-        doc.setFont(sansFont, "normal")
-        doc.setFontSize(8)
-        doc.setTextColor(70, 70, 70)
-        doc.text(card.label, x + 4, y + 6)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(COLORS.inkMuted[0], COLORS.inkMuted[1], COLORS.inkMuted[2]);
+        doc.text(card.label, x + 3.5, y + 5.5);
 
-        doc.setFont(serifFont, "normal")
-        doc.setFontSize(14)
-        doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
-        doc.text(card.value, x + 4, y + 14)
+        doc.setFont("times", "normal");
+        doc.setFontSize(14);
+        doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
+        doc.text(card.value, x + 3.5, y + 13.5);
 
-        doc.setFont(sansFont, "normal")
-        doc.setFontSize(8)
-        doc.setTextColor(GREEN_RGB[0], GREEN_RGB[1], GREEN_RGB[2])
-        doc.text(card.hint, x + 4, y + 20)
-      })
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(COLORS.green[0], COLORS.green[1], COLORS.green[2]);
+        doc.text(card.hint, x + 3.5, y + 19);
+      });
 
-      let y = cardY + (cardHeight + 6) * 2 + 6
-      drawTableHeader(y)
-      y += 11
-
-      doc.setFont(sansFont, "normal")
-      doc.setFontSize(9)
+      let y = firstCardY + cardHeight * 2 + 16;
+      drawTableHeader(y);
+      y += 11;
 
       for (const row of rows) {
         if (y > pageHeight - 20) {
-          drawFooter()
-          doc.addPage()
-          drawPageBackground()
-          doc.setFont(serifFont, "normal")
-          doc.setFontSize(14)
-          doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
-          doc.text("Rep Performance (Continued)", margin, 18)
-          y = 24
-          drawTableHeader(y)
-          y += 11
+          drawFooter();
+          doc.addPage();
+          drawBackground();
+
+          doc.setFont("times", "normal");
+          doc.setFontSize(16);
+          doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
+          doc.text("Rep Performance (continued)", margin, 18);
+
+          y = 24;
+          drawTableHeader(y);
+          y += 11;
         }
 
-        doc.setFillColor(255, 255, 255)
-        doc.setDrawColor(BORDER_RGB[0], BORDER_RGB[1], BORDER_RGB[2])
-        doc.roundedRect(margin, y - 6.2, pageWidth - margin * 2, 8.4, 1.2, 1.2, "FD")
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
+        doc.roundedRect(margin, y - 6.2, usableWidth, 8.4, 1.2, 1.2, "FD");
 
-        doc.setFont(sansFont, "normal")
-        doc.setFontSize(9)
-        doc.setTextColor(INK_RGB[0], INK_RGB[1], INK_RGB[2])
-        doc.text(row.repName, margin + 4, y - 0.6)
-        doc.text(formatCurrency(row.revenue), margin + 76, y - 0.6)
-        doc.text(formatCurrency(row.quota), margin + 112, y - 0.6)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(COLORS.ink[0], COLORS.ink[1], COLORS.ink[2]);
+        doc.text(row.repName, margin + 4, y - 0.5);
+        doc.text(formatCurrency(row.revenue), margin + 84, y - 0.5);
+        doc.text(formatCurrency(row.quota), margin + 118, y - 0.5);
 
-        const statusColor =
-          row.status === "On Track"
-            ? GREEN_RGB
-            : row.status === "At Risk"
-              ? ([176, 125, 0] as const)
-              : ([197, 34, 31] as const)
+        const statusColor = getStatusRgb(row.status);
+        doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
+        doc.text(row.status, margin + 150, y - 0.5);
 
-        doc.setTextColor(statusColor[0], statusColor[1], statusColor[2])
-        doc.text(row.status, margin + 144, y - 0.6)
-
-        y += 10
+        y += 10;
       }
 
-      drawFooter()
+      drawFooter();
 
-      const slug = fileName ? sanitizeFileName(fileName) : "pipelineiq-report"
-      doc.save(`${slug || "pipelineiq-report"}.pdf`)
+      const safeName = sanitizeFileName(fileName) || "pipelineiq-report";
+      doc.save(`${safeName}.pdf`);
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
   }
 
   return (
-    <Card className="border-border bg-paper">
-      <CardHeader>
-        <CardTitle className="font-serif text-3xl text-ink">CSV Report Uploader</CardTitle>
-        <CardDescription className="text-ink-2">
-          Drop a CSV to preview rep performance and generate a polished PDF.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-6">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          onChange={handleInputChange}
-        />
-
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(event) => {
-            event.preventDefault()
-            setIsDragging(true)
-          }}
-          onDragLeave={(event) => {
-            event.preventDefault()
-            setIsDragging(false)
-          }}
-          onDrop={(event) => {
-            event.preventDefault()
-            setIsDragging(false)
-            const file = event.dataTransfer.files?.[0]
-            if (file) parseFile(file)
-          }}
-          className={`flex min-h-56 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-            isDragging
-              ? "border-[#166534] bg-[#e9f4ec]"
-              : "border-border bg-white hover:bg-[var(--paper-2)]"
-          }`}
-        >
-          <Upload className="h-12 w-12 text-ink" />
-          <p className="mt-4 text-lg font-medium text-ink">Drag & drop your .csv here</p>
-          <p className="mt-2 text-sm text-ink-3">or click to browse files</p>
-        </button>
-
-        {fileName ? (
-          <p className="text-sm text-ink-2">
-            Loaded file: <span className="font-medium text-ink">{fileName}</span>
+    <section className="rounded-3xl border border-[#d8d5ce] bg-[#f9f5eb] p-6 text-[#1a1a1a] shadow-[0_22px_48px_rgba(26,26,26,0.08)] sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.11em] text-[#5a5a5a]">
+            CSV to PDF
           </p>
-        ) : null}
+          <h2 className="mt-2 font-serif text-4xl leading-tight">
+            Upload sales data and export a beautiful report
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm text-[#444]">
+            Drag in any CSV with rep name, revenue, and quota. We parse it,
+            preview it instantly, then generate a polished PDF in the PipelineIQ
+            paper + ink style.
+          </p>
+        </div>
+      </div>
 
-        {parseError ? (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{parseError}</p>
-        ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={onInputChange}
+      />
 
-        {rows.length > 0 ? (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-ink-3">Live Preview</p>
-              <Table className="mt-3">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-ink-3">Rep Name</TableHead>
-                    <TableHead className="text-ink-3">Revenue</TableHead>
-                    <TableHead className="text-ink-3">Quota</TableHead>
-                    <TableHead className="text-ink-3">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row, index) => (
-                    <TableRow key={`${row.repName}-${index}`}>
-                      <TableCell className="font-medium text-ink">{row.repName}</TableCell>
-                      <TableCell className="font-mono text-ink">{formatCurrency(row.revenue)}</TableCell>
-                      <TableCell className="font-mono text-ink">{formatCurrency(row.quota)}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusPillClasses(row.status)}`}>
-                          {row.status}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={onDrop}
+        className={`mt-7 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+          isDragging
+            ? "border-[#1a6e3c] bg-[#e4f2ea]"
+            : "border-[#cfcabf] bg-white hover:bg-[#f4efe3]"
+        }`}
+      >
+        <div className="mx-auto flex max-w-md flex-col items-center">
+          <Upload className="h-12 w-12 text-[#1a1a1a]" />
+          <p className="mt-4 text-lg font-medium">Drag and drop your CSV</p>
+          <p className="mt-2 text-sm text-[#5b5b5b]">or click to select a file</p>
+          <span className="mt-4 inline-flex items-center rounded-full bg-[#e2f0e8] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
+            .csv only
+          </span>
+        </div>
+      </div>
+
+      {fileName ? (
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d8d5ce] bg-white px-3 py-1.5 text-sm text-[#404040]">
+          <FileSpreadsheet className="h-4 w-4 text-[#1a6e3c]" />
+          {fileName}
+        </div>
+      ) : null}
+
+      {parseError ? (
+        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {parseError}
+        </p>
+      ) : null}
+
+      {rows.length > 0 ? (
+        <div className="mt-7 space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Team Revenue</p>
+              <p className="mt-2 font-serif text-2xl">{formatCurrency(totals.teamRevenue)}</p>
+            </div>
+            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Team Quota</p>
+              <p className="mt-2 font-serif text-2xl">{formatCurrency(totals.teamQuota)}</p>
+            </div>
+            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Attainment</p>
+              <p className="mt-2 font-serif text-2xl">{formatPercent(totals.attainment)}</p>
+            </div>
+            <div className="rounded-xl border border-[#d8d5ce] bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">On Track Reps</p>
+              <p className="mt-2 font-serif text-2xl">
+                {totals.onTrackCount}/{rows.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-[#d8d5ce] bg-white">
+            <div className="border-b border-[#d8d5ce] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#666]">Live Preview</p>
             </div>
 
-            <Button
-              type="button"
-              onClick={generatePdf}
-              disabled={isGenerating}
-              className="h-14 w-full bg-[#166534] text-base font-semibold text-white hover:bg-[#14532d]"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating PDF Report...
-                </>
-              ) : (
-                "Generate PDF Report"
-              )}
-            </Button>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-[#d8d5ce] bg-[#f6f1e7] text-left text-xs uppercase tracking-[0.08em] text-[#6a6a6a]">
+                    <th className="px-4 py-3">Rep</th>
+                    <th className="px-4 py-3">Revenue</th>
+                    <th className="px-4 py-3">Quota</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => (
+                    <tr key={`${row.repName}-${index}`} className="border-b border-[#ece8dc] last:border-b-0">
+                      <td className="px-4 py-3 font-medium text-[#1a1a1a]">{row.repName}</td>
+                      <td className="px-4 py-3 font-mono text-[#1a1a1a]">{formatCurrency(row.revenue)}</td>
+                      <td className="px-4 py-3 font-mono text-[#1a1a1a]">{formatCurrency(row.quota)}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(
+                            row.status
+                          )}`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  )
+
+          <Button
+            type="button"
+            disabled={isGenerating}
+            onClick={generatePdf}
+            className="h-12 w-full bg-[#1a6e3c] text-sm font-semibold text-white hover:bg-[#14552f]"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating PDF...
+              </>
+            ) : (
+              "Generate PDF"
+            )}
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
 }

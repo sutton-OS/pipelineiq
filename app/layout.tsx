@@ -23,13 +23,23 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "PipelineIQ | Beautiful Sales Reporting",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://pipelineiq.app"
+  ),
+  title: {
+    default: "PipelineIQ | Beautiful Sales Reporting",
+    template: "%s | PipelineIQ",
+  },
   description:
-    "One CSV → stunning PDF reports your team will actually read. No more Tableau hell.",
+    "One CSV → stunning PDF reports your team will actually read. Upload sales data, preview instantly, and export leadership-ready PDFs.",
+  applicationName: "PipelineIQ",
   openGraph: {
+    type: "website",
+    siteName: "PipelineIQ",
+    url: "/",
     title: "PipelineIQ | Beautiful Sales Reporting",
     description:
-      "One CSV → stunning PDF reports your team will actually read. No more Tableau hell.",
+      "One CSV → stunning PDF reports your team will actually read. Upload sales data, preview instantly, and export leadership-ready PDFs.",
     images: [
       {
         url: "/og-placeholder.svg",
@@ -38,6 +48,13 @@ export const metadata: Metadata = {
         alt: "PipelineIQ report preview placeholder",
       },
     ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PipelineIQ | Beautiful Sales Reporting",
+    description:
+      "One CSV → stunning PDF reports your team will actually read.",
+    images: ["/og-placeholder.svg"],
   },
 };
 
@@ -52,10 +69,8 @@ export default function RootLayout({
       className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
     >
       <body>
-        <ClerkProvider>
-          {children}
-          <Toaster position="top-right" richColors />
-        </ClerkProvider>
+        <ClerkProvider>{children}</ClerkProvider>
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );
