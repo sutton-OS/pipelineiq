@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { Download, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { exportReportPDF, type ReportPDFData } from "@/lib/pdf-export"
 
 type ExportPDFButtonProps = ReportPDFData
@@ -22,24 +21,23 @@ export function ExportPDFButton(props: ExportPDFButtonProps) {
   }
 
   return (
-    <Button
+    <button
       type="button"
-      size="sm"
       onClick={handleExport}
       disabled={isExporting}
-      className="h-8 bg-[var(--ink)] px-3 text-xs font-medium text-[var(--paper)] hover:bg-[var(--ink-2)]"
+      className="fixed right-6 top-6 z-[100] inline-flex items-center gap-2 rounded-[6px] bg-[var(--ink)] px-[18px] py-[9px] text-xs font-medium tracking-[0.03em] text-white shadow-[0_2px_12px_rgba(0,0,0,0.15)] transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-70 print:hidden"
     >
       {isExporting ? (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="h-[13px] w-[13px] animate-spin" />
           Generating PDF...
         </>
       ) : (
         <>
-          <Download className="h-3.5 w-3.5" />
+          <Download className="h-[13px] w-[13px]" />
           Export PDF
         </>
       )}
-    </Button>
+    </button>
   )
 }

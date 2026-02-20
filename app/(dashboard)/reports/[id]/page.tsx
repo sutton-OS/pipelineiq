@@ -384,17 +384,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <ExportPDFButton
-          reportName={report.name}
-          period={periodLabel}
-          teamRevenue={teamRevenue}
-          teamGoal={teamGoal}
-          goalPercent={goalPercent}
-          reps={exportRows}
-        />
-      </div>
+    <div>
+      <ExportPDFButton
+        reportName={report.name}
+        period={periodLabel}
+        teamRevenue={teamRevenue}
+        teamGoal={teamGoal}
+        goalPercent={goalPercent}
+        reps={exportRows}
+      />
       <DashboardClient {...dashboardProps} />
     </div>
   );
