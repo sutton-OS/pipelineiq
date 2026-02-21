@@ -26,6 +26,15 @@ type TrainerCount = {
   count: number;
 };
 
+type CurrentPayPeriod = {
+  periodLabel: string;
+  currentCommission: number;
+  currentUnits: number;
+  currentSales: number;
+  currentFP: number;
+  currentPeriodRows: Array<{ trainer: string }>;
+};
+
 type CommissionReport = {
   totalRevenue: number;
   totalSales: number;
@@ -38,6 +47,7 @@ type CommissionReport = {
   totalBonuses: number;
   bestPeriod: PayPeriod | null;
   cancellations: number;
+  currentPayPeriod: CurrentPayPeriod;
 };
 
 const MONTH_HEADER_PATTERN =
@@ -135,6 +145,62 @@ function parsePayPeriodSummary(row: string[], index: number): PayPeriod {
   const bonus = parseBonusFromPayPeriodRow(row);
 
   return { label, amount, units, bonus };
+}
+
+function getCurrentPayPeriodRange() {
+  const today = new Date();
+  const day = today.getDate();
+  const month = today.toLocaleString("en-US", { month: "long" });
+  const year = today.getFullYear();
+
+  let periodLabel = "";
+  let periodStart: Date;
+  let periodEnd: Date;
+
+  if (day <= 15) {
+    periodLabel = `${month} 1 – 15, ${year}`;
+    periodStart = new Date(year, today.getMonth(), 1);
+    periodEnd = new Date(year, today.getMonth(), 15);
+  } else {
+    const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
+    periodLabel = `${month} 16 – ${lastDay}, ${year}`;
+    periodStart = new Date(year, today.getMonth(), 16);
+    periodEnd = new Date(year, today.getMonth() + 1, 0);
+  }
+
+  return { periodLabel, periodStart, periodEnd };
+}
+
+function parseTransactionDate(value: string, fallbackYear: number) {
+  const trimmed = value.trim().replace(/"/g, "");
+  if (!trimmed) return null;
+
+  const numericDate = trimmed.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/);
+  if (numericDate) {
+    const month = Number.parseInt(numericDate[1], 10);
+    const day = Number.parseInt(numericDate[2], 10);
+    const yearToken = numericDate[3];
+    const year = yearToken
+      ? yearToken.length === 2
+        ? 2000 + Number.parseInt(yearToken, 10)
+        : Number.parseInt(yearToken, 10)
+      : fallbackYear;
+
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && Number.isFinite(year)) {
+      const candidate = new Date(year, month - 1, day);
+      if (
+        candidate.getFullYear() === year &&
+        candidate.getMonth() === month - 1 &&
+        candidate.getDate() === day
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
 function looksLikeMonthHeader(firstColumn: string) {
@@ -293,12 +359,19 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
   const membershipCounts = buildEmptyMembershipCounts();
   const trainerMap = new Map<string, TrainerCount>();
   const payPeriods: PayPeriod[] = [];
+  const { periodLabel, periodStart, periodEnd } = getCurrentPayPeriodRange();
 
-  let totalRevenue = 0;
   let totalSales = 0;
   let totalFP = 0;
   let cancellations = 0;
+  let currentCommission = 0;
+  let currentUnits = 0;
+  let currentSales = 0;
+  let currentFP = 0;
+  const currentPeriodRows: Array<{ trainer: string }> = [];
   let headerSkipped = false;
+  const periodStartTime = periodStart.getTime();
+  const periodEndTime = periodEnd.getTime();
 
   for (const rawRow of rawRows) {
     const row = rawRow.map((cell) => String(cell ?? "").trim());
@@ -317,7 +390,6 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
       const period = parsePayPeriodSummary(row, payPeriods.length);
       if (period.amount > 0 || period.bonus > 0 || period.units > 0) {
         payPeriods.push(period);
-        totalRevenue += period.amount;
       }
       continue;
     }
@@ -329,6 +401,24 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
     if (!isValidMemberName(memberName)) continue;
 
     const commission = parseCommission(commissionRaw);
+    const units = parseUnitsCell(row[6] ?? "");
+    const transactionDate = parseTransactionDate(firstColumn, periodStart.getFullYear());
+    const transactionTime = transactionDate?.getTime();
+    const inCurrentPayPeriod =
+      transactionTime !== undefined &&
+      transactionTime >= periodStartTime &&
+      transactionTime <= periodEndTime;
+
+    if (inCurrentPayPeriod) {
+      currentCommission += commission;
+      currentUnits += units;
+      if (commission > 0) {
+        currentSales += 1;
+        currentPeriodRows.push({ trainer: trainer.trim() });
+      }
+      if (looksLikeTrainerName(trainer)) currentFP += 1;
+    }
+
     if (commission <= 0) {
       if (commission < 0) cancellations += 1;
       continue;
@@ -354,9 +444,17 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
     (a, b) => b.count - a.count || a.name.localeCompare(b.name)
   );
 
-  const totalBonuses = payPeriods.reduce((sum, period) => sum + period.bonus, 0);
+  const currentYear = new Date().getFullYear();
+  const currentYearSuffix = String(currentYear).slice(-2);
+  const thisYearPeriods = payPeriods.filter(
+    (period) =>
+      period.label.includes(String(currentYear)) || period.label.includes(`/${currentYearSuffix}`)
+  );
+
+  const totalRevenue = thisYearPeriods.reduce((sum, period) => sum + period.amount, 0);
+  const totalBonuses = thisYearPeriods.reduce((sum, period) => sum + period.bonus, 0);
   const bestPeriod =
-    payPeriods.reduce<PayPeriod | null>((best, current) => {
+    thisYearPeriods.reduce<PayPeriod | null>((best, current) => {
       if (!best || current.amount > best.amount) return current;
       return best;
     }, null) ?? null;
@@ -372,10 +470,18 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
     avgCommission,
     membershipCounts,
     trainerCounts,
-    payPeriods,
+    payPeriods: thisYearPeriods,
     totalBonuses,
     bestPeriod,
     cancellations,
+    currentPayPeriod: {
+      periodLabel,
+      currentCommission,
+      currentUnits,
+      currentSales,
+      currentFP,
+      currentPeriodRows,
+    },
   } satisfies CommissionReport;
 }
 
@@ -398,6 +504,20 @@ export function ReportUploader() {
     document.head.appendChild(link);
   }, []);
 
+  useEffect(() => {
+    if (!report) return;
+
+    const frame = requestAnimationFrame(() => {
+      const fills = document.querySelectorAll<HTMLElement>(".current-goal-fill[data-goal-width]");
+      fills.forEach((fill) => {
+        const targetWidth = fill.dataset.goalWidth;
+        fill.style.width = targetWidth ? `${targetWidth}%` : "0%";
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [report]);
+
   const reportHTML = useMemo(() => {
     if (!report) return "";
 
@@ -406,6 +526,35 @@ export function ReportUploader() {
         ? report.payPeriods.reduce((sum, period) => sum + period.amount, 0) /
           report.payPeriods.length
         : 0;
+    const GOAL = 1000;
+    const currentCommission = report.currentPayPeriod.currentCommission;
+    const currentSales = report.currentPayPeriod.currentSales;
+    const remaining = Math.max(GOAL - currentCommission, 0);
+    const goalPercent = Math.min((currentCommission / GOAL) * 100, 100);
+    const isHit = currentCommission >= GOAL;
+    const goalPercentText = formatPercent(goalPercent, 0);
+    const goalFillColor =
+      goalPercent >= 100 ? "var(--green)" : goalPercent >= 60 ? "var(--amber)" : "var(--accent)";
+    const goalOverAmount = Math.max(currentCommission - GOAL, 0);
+
+    const today = new Date();
+    const day = today.getDate();
+    const year = today.getFullYear();
+    const periodEndDate =
+      day <= 15 ? new Date(year, today.getMonth(), 15) : new Date(year, today.getMonth() + 1, 0);
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysLeft = Math.max(Math.ceil((periodEndDate.getTime() - today.getTime()) / msPerDay), 1);
+    const dailyNeeded = remaining > 0 ? (remaining / daysLeft).toFixed(2) : 0;
+    const FP_COMMISSION = 10;
+    const currentPeriodRows = report.currentPayPeriod.currentPeriodRows;
+    const currentSalesWithFP = currentPeriodRows.filter((row) => row.trainer).length;
+    const currentSalesWithoutFP = currentSales - currentSalesWithFP;
+    const fpConversionRateValue =
+      currentSales > 0 ? (currentSalesWithFP / currentSales) * 100 : 0;
+    const fpConversionRate = currentSales > 0 ? fpConversionRateValue.toFixed(1) : "0";
+    const missedCommission = currentSalesWithoutFP * FP_COMMISSION;
+    const potentialTotal = currentCommission + missedCommission;
+    const fpConversionBarWidth = Math.min(Math.max(fpConversionRateValue, 0), 100);
 
     const maxPeriodAmount =
       report.payPeriods.length > 0
@@ -784,10 +933,251 @@ export function ReportUploader() {
   .report-title { font-family: 'Instrument Serif', serif; font-size: 28px; letter-spacing: -0.5px; line-height: 1.1; text-align: right; }
   .report-period { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; text-align: right; margin-top: 4px; }
 
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s infinite;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  /* CURRENT PERIOD */
+  .current-period-card {
+    background: var(--ink);
+    border: none;
+    color: white;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .current-period-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .current-period-label {
+    margin-top: 8px;
+    color: rgba(255,255,255,0.45);
+    font-size: 14px;
+  }
+  .current-period-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  .current-period-value {
+    font-family: 'Instrument Serif', serif;
+    font-size: 42px;
+    letter-spacing: -1.2px;
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .current-period-units {
+    font-size: 20px;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 0;
+  }
+  .current-period-sub {
+    margin-top: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    text-transform: lowercase;
+  }
+  .current-period-footer {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.45);
+    font-size: 12px;
+  }
+  .current-goal-block { margin-top: 14px; }
+  .current-goal-meta {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+  }
+  .current-goal-meta-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+  }
+  .current-goal-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .current-goal-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 99px;
+    transition: width 1s ease-out;
+  }
+  .current-goal-status {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .current-goal-status-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+  }
+  .current-goal-hit-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+  }
+  .current-goal-row {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .current-goal-col { min-width: 0; }
+  .current-goal-col-label {
+    color: rgba(255,255,255,0.45);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .current-goal-col-value {
+    margin-top: 4px;
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+    line-height: 1;
+  }
+  .current-goal-hit-row {
+    margin-top: 10px;
+    background: var(--green-light);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .current-goal-hit-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--green);
+    line-height: 1.3;
+  }
+  .current-goal-hit-sub {
+    margin-top: 4px;
+    color: var(--green);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+  }
+  .fitness-profile-block {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.14);
+  }
+  .fitness-profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .fitness-profile-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .fitness-profile-rate {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+  }
+  .fitness-profile-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .fitness-profile-label {
+    color: rgba(255,255,255,0.45);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .fitness-profile-value {
+    margin-top: 4px;
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    letter-spacing: -0.6px;
+    line-height: 1;
+  }
+  .fitness-profile-value.accent { color: var(--accent); }
+  .fitness-profile-value.green { color: var(--green); }
+  .fitness-profile-sub {
+    margin-top: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+  }
+  .fitness-profile-bar-wrap { margin-top: 12px; }
+  .fitness-profile-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .fitness-profile-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--blue);
+  }
+  .fitness-profile-bar-meta {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    color: rgba(255,255,255,0.45);
+    font-size: 11px;
+  }
+  .fitness-profile-bar-meta .mono {
+    font-size: 11px;
+    color: white;
+  }
+  .fitness-profile-opportunity {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .fitness-profile-opportunity-col { min-width: 0; }
+
   /* HERO BANNER */
   .hero-banner {
-    background: var(--ink);
-    color: white;
+    background: white;
+    border: 1.5px solid var(--border);
+    color: var(--ink);
     border-radius: 10px;
     padding: 28px 32px;
     margin-bottom: 28px;
@@ -797,9 +1187,9 @@ export function ReportUploader() {
     gap: 32px;
   }
   .hero-left { display: flex; flex-direction: column; gap: 8px; }
-  .hero-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); }
-  .hero-amount { font-family: 'Instrument Serif', serif; font-size: 52px; letter-spacing: -2px; line-height: 1; }
-  .hero-sub { font-size: 13px; color: rgba(255,255,255,0.45); }
+  .hero-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
+  .hero-amount { font-family: 'Instrument Serif', serif; font-size: 52px; letter-spacing: -2px; line-height: 1; color: var(--ink); }
+  .hero-sub { font-size: 13px; color: var(--ink-3); }
   .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
   .hero-badge {
     display: inline-flex; align-items: center; gap: 5px;
@@ -810,9 +1200,9 @@ export function ReportUploader() {
   .badge-amber { background: rgba(200,73,26,0.25); color: #f08060; }
   .hero-right { display: flex; flex-direction: column; gap: 16px; min-width: 260px; }
   .hero-stat-row { display: flex; justify-content: space-between; align-items: baseline; }
-  .hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.45); }
-  .hero-stat-value { font-family: 'DM Mono', monospace; font-size: 14px; color: white; }
-  .hero-divider { height: 1px; background: rgba(255,255,255,0.1); }
+  .hero-stat-label { font-size: 12px; color: var(--ink-3); }
+  .hero-stat-value { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--ink); }
+  .hero-divider { height: 1px; background: var(--border); }
 
   /* STAT GRID */
   .stat-grid {
@@ -1019,11 +1409,115 @@ export function ReportUploader() {
     </div>
   </div>
 
+  <div class="current-period-card">
+    <div class="current-period-badge">
+      <span class="pulse-dot"></span>
+      CURRENT PERIOD
+    </div>
+    <div class="current-period-label">${escapeHtml(report.currentPayPeriod.periodLabel)}</div>
+    <div class="current-period-grid">
+      <div>
+        <div class="current-period-value">${formatCurrency(report.currentPayPeriod.currentCommission)}</div>
+        <div class="current-period-sub">commission so far</div>
+      </div>
+      <div>
+        <div class="current-period-value">
+          ${formatUnits(report.currentPayPeriod.currentUnits)}
+          <span class="current-period-units">units</span>
+        </div>
+        <div class="current-period-sub">units so far</div>
+      </div>
+    </div>
+    <div class="current-goal-block">
+      <div class="current-goal-meta">
+        <span class="current-goal-meta-text">${formatCurrency(currentCommission)} of ${formatCurrency(
+      GOAL
+    )} goal</span>
+      </div>
+      <div class="current-goal-bar">
+        <div class="current-goal-fill" data-goal-width="${formatSvgNumber(goalPercent)}" style="background:${goalFillColor}"></div>
+      </div>
+      <div class="current-goal-status">
+        <span class="current-goal-status-text">${goalPercentText} there</span>
+        ${
+          isHit
+            ? '<span class="current-goal-hit-text">🎯 Goal hit!</span>'
+            : `<span class="current-goal-status-text">${daysLeft} ${
+                daysLeft === 1 ? "day" : "days"
+              } left in period</span>`
+        }
+      </div>
+      ${
+        isHit
+          ? `<div class="current-goal-hit-row">
+              <div class="current-goal-hit-title">You've hit your ${formatCurrency(
+                GOAL
+              )} goal this period 🎉</div>
+              <div class="current-goal-hit-sub">You're ${formatCurrency(goalOverAmount)} over goal</div>
+            </div>`
+          : `<div class="current-goal-row">
+              <div class="current-goal-col">
+                <div class="current-goal-col-label">Daily target to hit goal</div>
+                <div class="current-goal-col-value">$${dailyNeeded} / day</div>
+              </div>
+              <div class="current-goal-col" style="text-align:right">
+                <div class="current-goal-col-label">Days remaining</div>
+                <div class="current-goal-col-value">${daysLeft}</div>
+              </div>
+            </div>`
+      }
+    </div>
+    <div class="fitness-profile-block">
+      <div class="fitness-profile-header">
+        <span class="fitness-profile-badge">FITNESS PROFILES</span>
+        <span class="fitness-profile-rate">${fpConversionRate}% attach rate</span>
+      </div>
+      <div class="fitness-profile-grid">
+        <div>
+          <div class="fitness-profile-label">Sold this period</div>
+          <div class="fitness-profile-value">${currentSalesWithFP}</div>
+          <div class="fitness-profile-sub">of ${currentSales} total sales</div>
+        </div>
+        <div style="text-align:right">
+          <div class="fitness-profile-label">Missed FP commission</div>
+          <div class="fitness-profile-value accent">${formatCurrency(missedCommission)}</div>
+          <div class="fitness-profile-sub">${currentSalesWithoutFP} sales without FP</div>
+        </div>
+      </div>
+      <div class="fitness-profile-bar-wrap">
+        <div class="fitness-profile-bar">
+          <div class="fitness-profile-bar-fill" style="width:${fpConversionBarWidth}%"></div>
+        </div>
+        <div class="fitness-profile-bar-meta">
+          <span>${currentSalesWithoutFP} members didn't get a trainer</span>
+          <span class="mono">${fpConversionRate}% conversion</span>
+        </div>
+      </div>
+      ${
+        missedCommission > 0
+          ? `<div class="fitness-profile-opportunity">
+              <div class="fitness-profile-opportunity-col">
+                <div class="fitness-profile-label">If you hit 100% FP rate</div>
+                <div class="fitness-profile-value">${formatCurrency(potentialTotal)} total this period</div>
+              </div>
+              <div class="fitness-profile-opportunity-col" style="text-align:right">
+                <div class="fitness-profile-label">Extra you'd earn</div>
+                <div class="fitness-profile-value green">+${formatCurrency(missedCommission)}</div>
+              </div>
+            </div>`
+          : ""
+      }
+    </div>
+    <div class="current-period-footer">
+      ${report.currentPayPeriod.currentSales} members sold &middot; ${report.currentPayPeriod.currentFP} fitness profiles
+    </div>
+  </div>
+
   <div class="hero-banner">
     <div class="hero-left">
       <div class="hero-label">Verified Commission (Pay Period Totals)</div>
       <div class="hero-amount">${formatCurrency(report.totalRevenue)}</div>
-      <div class="hero-sub">Commission ${formatCurrency(report.totalRevenue)} + Bonuses ${formatCurrency(report.totalBonuses)} across ${report.payPeriods.length} pay periods</div>
+      <div class="hero-sub">${year} earnings &middot; ${report.payPeriods.length} pay periods</div>
       <div class="hero-badges">
         <span class="hero-badge badge-green">
           <span style="width:5px;height:5px;border-radius:50%;background:#7ad39f;flex-shrink:0"></span>

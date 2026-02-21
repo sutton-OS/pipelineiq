@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
-import { Pool } from "pg";
 import { z } from "zod";
 
 const EnvSchema = z.object({
@@ -41,24 +40,29 @@ async function main() {
     throw new Error("Invalid environment configuration");
   }
 
-  const { DATABASE_URL, NODE_ENV } = envResult.data;
+  const { NODE_ENV } = envResult.data;
   console.log(`[worker] starting (${NODE_ENV})`);
 
-  let pool: Pool | null = null;
+  const [{ pool }, { ensureSchema }, { runLoop }] = await Promise.all([
+    import("./db"),
+    import("./schema"),
+    import("./runner"),
+  ]);
+
   try {
-    pool = new Pool({ connectionString: DATABASE_URL });
     await pool.query("SELECT 1");
     console.log("[worker] database reachable");
+
+    await ensureSchema();
+    console.log("[worker] schema ready");
+
+    await runLoop();
   } catch (error) {
     console.error("[worker] database unreachable");
     if (error instanceof Error) {
       console.error(error.message);
     }
     throw error;
-  } finally {
-    if (pool) {
-      await pool.end();
-    }
   }
 }
 
