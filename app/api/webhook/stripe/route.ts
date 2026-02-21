@@ -2,15 +2,22 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerClient } from '@/lib/supabase'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
-})
+export async function POST(request: Request) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
-export async function POST(req: Request) {
+  if (!stripeKey || !webhookSecret) {
+    return new Response('Stripe not configured', { status: 500 })
+  }
+
+  const stripe = new Stripe(stripeKey, {
+    apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
+  })
+
   // CRITICAL: arrayBuffer() is required. Do NOT change to .text() or .json()
-  const body = await req.arrayBuffer()
+  const body = await request.arrayBuffer()
   const rawBody = Buffer.from(body)
-  const signature = req.headers.get('stripe-signature')
+  const signature = request.headers.get('stripe-signature')
 
   if (!signature) {
     return NextResponse.json({ error: 'No signature' }, { status: 400 })
@@ -18,7 +25,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET!)
+    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
   } catch (err) {
     console.error('Webhook signature verification failed:', err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
