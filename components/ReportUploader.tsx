@@ -547,6 +547,13 @@ export function ReportUploader() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem("piq-dark") === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const availableYears = useMemo(() => {
     if (!parsedData) return [];
@@ -568,6 +575,12 @@ export function ReportUploader() {
       : availableYears[availableYears.length - 1];
     setSelectedYear(fallbackYear);
   }, [availableYears, selectedYear]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("piq-dark", String(darkMode));
+    } catch {}
+  }, [darkMode]);
 
   const report = useMemo(() => {
     if (!parsedData) return null;
@@ -836,7 +849,7 @@ export function ReportUploader() {
       const value = maxVal - (maxVal - minVal) * ratio;
 
       return `<g>
-        <line class="pay-trend-grid-line" x1="${formatSvgNumber(PAD.left)}" y1="${formatSvgNumber(
+        <line class="pay-trend-grid-line chart-grid-line" x1="${formatSvgNumber(PAD.left)}" y1="${formatSvgNumber(
           y
         )}" x2="${formatSvgNumber(W - PAD.right)}" y2="${formatSvgNumber(y)}"></line>
         <text class="pay-trend-y-label" x="${formatSvgNumber(PAD.left - 8)}" y="${formatSvgNumber(
@@ -993,6 +1006,8 @@ export function ReportUploader() {
     max-width: 960px;
     margin: 0 auto;
     padding: 48px 40px 80px;
+    background: var(--paper);
+    transition: background 0.3s ease, color 0.3s ease;
   }
 
   /* HEADER */
@@ -1036,6 +1051,7 @@ export function ReportUploader() {
     border-radius: 8px;
     padding: 20px 24px;
     margin-bottom: 20px;
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
   .current-period-badge {
     display: inline-flex;
@@ -1277,6 +1293,7 @@ export function ReportUploader() {
     justify-content: space-between;
     align-items: center;
     gap: 32px;
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
   .hero-left { display: flex; flex-direction: column; gap: 8px; }
   .hero-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
@@ -1308,6 +1325,7 @@ export function ReportUploader() {
     border: 1.5px solid var(--border);
     border-radius: 8px;
     padding: 18px 20px;
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
   .stat-label { font-size: 11px; font-weight: 500; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
   .stat-value { font-family: 'Instrument Serif', serif; font-size: 30px; letter-spacing: -0.5px; line-height: 1; }
@@ -1431,6 +1449,7 @@ export function ReportUploader() {
   /* BOTTOM GRID */
   .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 36px; }
   .card { background: white; border: 1.5px solid var(--border); border-radius: 8px; padding: 22px 24px; }
+  .card { transition: background 0.3s ease, border-color 0.3s ease; }
   .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-bottom: 18px; }
 
   /* MEMBERSHIP BREAKDOWN */
@@ -1475,6 +1494,128 @@ export function ReportUploader() {
   .footer-brand { font-family: 'Instrument Serif', serif; font-size: 14px; color: var(--ink-3); }
   .footer-brand span { color: var(--accent); font-style: italic; }
   .footer-note { font-size: 11px; color: var(--ink-3); font-family: 'DM Mono', monospace; }
+
+  /* YEAR CONTROLS */
+  .year-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .year-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    transition: background 0.3s ease, color 0.3s ease;
+    cursor: pointer;
+  }
+  .year-btn-active {
+    background: var(--ink);
+    color: #ffffff;
+  }
+  .year-btn-inactive {
+    background: var(--paper-2);
+    color: var(--ink-3);
+  }
+  .theme-toggle-btn {
+    border: none;
+    background: none;
+    padding: 6px;
+    cursor: pointer;
+    line-height: 0;
+    transition: opacity 0.2s ease;
+  }
+  .theme-toggle-btn:hover { opacity: 0.7; }
+
+  /* DARK MODE */
+  .dm {
+    --dm-bg: #111318;
+    --dm-surface: #1c1f26;
+    --dm-surface-2: #23272f;
+    --dm-border: #2e3340;
+    --dm-ink: #f0f2f5;
+    --dm-ink-2: #9aa0b0;
+    --dm-ink-3: #5a6070;
+    --dm-accent: #e05a20;
+    --paper: var(--dm-bg);
+    --paper-2: var(--dm-surface-2);
+    --paper-3: var(--dm-border);
+    --border: var(--dm-border);
+    --ink: var(--dm-ink);
+    --ink-2: var(--dm-ink-2);
+    --ink-3: var(--dm-ink-3);
+    --accent: var(--dm-accent);
+    background: #111318;
+    color: #f0f2f5;
+  }
+  .dm .page {
+    background: var(--dm-bg);
+    color: var(--dm-ink);
+  }
+  .dm .card,
+  .dm .stat-card {
+    background: var(--dm-surface);
+    border-color: var(--dm-border);
+  }
+  .dm .current-period-card {
+    background: #0d0f14;
+    border: 1px solid var(--dm-border);
+  }
+  .dm .current-goal-bar { background: rgba(255,255,255,0.08); }
+  .dm .current-goal-row { background: rgba(255,255,255,0.04); }
+  .dm .hero-banner {
+    background: var(--dm-surface);
+    border-color: var(--dm-border);
+    color: var(--dm-ink);
+  }
+  .dm .report-header { border-bottom-color: var(--dm-border); }
+  .dm .report-title,
+  .dm .hero-amount,
+  .dm .hero-stat-value,
+  .dm .stat-value,
+  .dm .fp-rate-big,
+  .dm .fp-stat-val,
+  .dm .pay-trend-stat-value {
+    color: var(--dm-ink);
+  }
+  .dm .brand-sub,
+  .dm .report-period,
+  .dm .hero-label,
+  .dm .hero-sub,
+  .dm .hero-stat-label,
+  .dm .stat-label,
+  .dm .stat-sub,
+  .dm .card-title,
+  .dm .mem-count,
+  .dm .trainer-rank,
+  .dm .fp-rate-label,
+  .dm .fp-stat-lab,
+  .dm .pay-trend-stat-label,
+  .dm .pay-trend-stat-sub,
+  .dm .year-label {
+    color: var(--dm-ink-3);
+  }
+  .dm .mem-label { color: var(--dm-ink-2); }
+  .dm .period-name,
+  .dm .mono,
+  .dm .trainer-name { color: var(--dm-ink); }
+  .dm .pay-table th { color: var(--dm-ink-3); }
+  .dm .pay-table thead tr { border-bottom-color: #2e3340; }
+  .dm .pay-table td { border-bottom-color: #23272f; }
+  .dm .pay-table tbody tr:hover { background: #23272f; }
+  .dm svg text { fill: #5a6070; }
+  .dm .chart-grid-line,
+  .dm .pay-trend-grid-line { stroke: #2e3340; }
+  .dm .pay-trend-area { fill-opacity: 0.15; }
+  .dm .pay-trend-tooltip-line { fill: #f0f2f5; }
+  .dm .pay-trend-tooltip-title { fill: #ffffff; }
+  .dm .mini-bar { background: #2e3340; }
+  .dm .mem-track { background: #23272f; }
+  .dm .year-btn-active { background: #f0f2f5; color: #111318; }
+  .dm .year-btn-inactive { background: #23272f; color: #5a6070; }
+  .dm .report-footer { border-top-color: #2e3340; }
+  .dm .footer-brand, .dm .footer-note { color: #5a6070; }
 
   /* EXPORT BTN */
   .export-btn {
@@ -2067,40 +2208,74 @@ export function ReportUploader() {
         </div>
 
         {report ? (
-          <div className="space-y-3">
-            {availableYears.length > 0 ? (
+          <div className={darkMode ? "dm" : ""}>
+            <div
+              className="space-y-3"
+              style={{ transition: "background 0.3s ease, color 0.3s ease" }}
+            >
               <div className="flex items-center justify-end gap-2">
-                <span
-                  className="text-[11px] text-[#888]"
-                  style={{ fontFamily: "'DM Mono', monospace" }}
+                {availableYears.length > 0 ? (
+                  <>
+                    <span className="year-label">Viewing:</span>
+                    <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
+                      {availableYears.map((year) => {
+                        const isActive = year === selectedYear;
+                        return (
+                          <button
+                            key={year}
+                            type="button"
+                            onClick={() => setSelectedYear(year)}
+                            className={`year-btn ${
+                              isActive ? "year-btn-active" : "year-btn-inactive"
+                            }`}
+                          >
+                            {year}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                  className="theme-toggle-btn"
+                  onClick={() => setDarkMode((current) => !current)}
                 >
-                  Viewing:
-                </span>
-                <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
-                  {availableYears.map((year) => {
-                    const isActive = year === selectedYear;
-                    return (
-                      <button
-                        key={year}
-                        type="button"
-                        onClick={() => setSelectedYear(year)}
-                        className="rounded-md px-[14px] py-[6px] text-xs transition-colors"
-                        style={{
-                          fontFamily: "'DM Mono', monospace",
-                          backgroundColor: isActive
-                            ? "var(--ink, #0f0f0f)"
-                            : "var(--paper-2, #eceae4)",
-                          color: isActive ? "white" : "var(--ink-3, #888)",
-                        }}
-                      >
-                        {year}
-                      </button>
-                    );
-                  })}
-                </div>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    style={{
+                      transition: "transform 0.4s ease",
+                      transform: darkMode ? "rotate(180deg)" : "rotate(0deg)",
+                    }}
+                  >
+                    <defs>
+                      <clipPath id="half">
+                        <rect x="0" y="0" width="9" height="18" />
+                      </clipPath>
+                    </defs>
+                    <circle
+                      cx="9"
+                      cy="9"
+                      r="8"
+                      fill="none"
+                      stroke={darkMode ? "rgba(255,255,255,0.6)" : "var(--ink-3)"}
+                      strokeWidth="1.5"
+                    />
+                    <circle
+                      cx="9"
+                      cy="9"
+                      r="8"
+                      clipPath="url(#half)"
+                      fill={darkMode ? "rgba(255,255,255,0.6)" : "var(--ink-3)"}
+                    />
+                  </svg>
+                </button>
               </div>
-            ) : null}
-            <div dangerouslySetInnerHTML={{ __html: reportHTML }} />
+              <div dangerouslySetInnerHTML={{ __html: reportHTML }} />
+            </div>
           </div>
         ) : null}
       </div>
