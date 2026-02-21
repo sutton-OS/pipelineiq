@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker:dev": "npm --prefix services/worker run dev",
+    "worker:build": "npm --prefix services/worker run build",
+    "worker:start": "npm --prefix services/worker run start",
+    "dev:all": "npm run dev & npm run worker:dev & wait"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.38.0",

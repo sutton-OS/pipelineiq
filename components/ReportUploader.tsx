@@ -61,6 +61,9 @@ const MEMBERSHIP_COLORS: Record<MembershipKey, string> = {
   Other: "#aca59a",
 };
 
+const GOOGLE_SHEETS_SYNC_URL =
+  "https://docs.google.com/spreadsheets/d/1mHZEg4MZrkrwb5Yb17Sy55yL_AEg40UDEY6gYa43_7Q/export?format=csv&gid=1050163422";
+
 function buildEmptyMembershipCounts(): Record<MembershipKey, number> {
   return {
     Premium: 0,
@@ -81,6 +84,23 @@ function parseCommission(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const DATE_LIKE_VALUE_PATTERN = /^\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?$/;
+
+const TRAINER_NAME_NORMALIZATION: Record<string, string> = {
+  sariah: "Sariah",
+  sairah: "Sariah",
+  britany: "Brittany",
+  brittany: "Brittany",
+  janess: "Janessa",
+  janessa: "Janessa",
+  maddy: "Maddie",
+  maddie: "Maddie",
+};
+
+function parseCurrencyCell(value: string) {
+  return parseCommission(value.replace(/"/g, ""));
+}
+
 function extractDollarValues(text: string) {
   const matches = text.match(/\$\s*-?[\d,]+(?:\.\d+)?/g) ?? [];
   return matches
@@ -88,78 +108,33 @@ function extractDollarValues(text: string) {
     .filter((value) => Number.isFinite(value));
 }
 
-function firstNumericValue(text: string) {
-  const match = text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  if (!match) return 0;
-
-  const parsed = Number.parseFloat(match[0]);
+function parseUnitsCell(value: string) {
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  const parsed = Number.parseFloat(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function extractUnits(cells: string[]) {
-  for (const cell of cells) {
-    if (!/unit/i.test(cell)) continue;
-    const value = firstNumericValue(cell);
-    if (value) return value;
-  }
+function parseBonusFromPayPeriodRow(row: string[]) {
+  const bonusCells = [row[7] ?? "", row[8] ?? ""];
 
-  for (const cell of cells) {
-    if (cell.includes("$")) continue;
-    const value = firstNumericValue(cell);
-    if (value) return value;
+  for (const cell of bonusCells) {
+    if (!cell.includes("$")) continue;
+    const values = extractDollarValues(cell);
+    for (const amount of values) {
+      if (amount > 0) return amount;
+    }
   }
 
   return 0;
 }
 
-function cleanPayPeriodLabel(label: string, index: number) {
-  const cleaned = label
-    .replace(/\b(pay\s*period|pay\s*date|period|summary|date)\b/gi, " ")
-    .replace(/[:|\-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return cleaned || `Period ${index + 1}`;
-}
-
 function parsePayPeriodSummary(row: string[], index: number): PayPeriod {
-  const firstColumn = row[0] ?? "";
-  const col7 = row[7] ?? "";
-  const col8 = row[8] ?? "";
-  const label = cleanPayPeriodLabel(firstColumn, index);
+  const label = (row[0] ?? "").trim() || `Period ${index + 1}`;
+  const amount = parseCurrencyCell(row[5] ?? "");
+  const units = parseUnitsCell(row[6] ?? "");
+  const bonus = parseBonusFromPayPeriodRow(row);
 
-  const tokens = [col7, col8].flatMap((cell) => {
-    const values = extractDollarValues(cell);
-    const isBonusCell = /bonus/i.test(cell);
-    return values.map((value) => ({ value, isBonusCell }));
-  });
-
-  let bonus = tokens
-    .filter((token) => token.isBonusCell)
-    .reduce((sum, token) => sum + token.value, 0);
-
-  const nonBonusValues = tokens
-    .filter((token) => !token.isBonusCell)
-    .map((token) => token.value);
-
-  let amount = nonBonusValues[0] ?? 0;
-  if (nonBonusValues.length > 1) {
-    bonus += nonBonusValues.slice(1).reduce((sum, value) => sum + value, 0);
-  }
-
-  if (amount === 0 && bonus === 0 && tokens.length > 0) {
-    amount = tokens[0]?.value ?? 0;
-    bonus = tokens.slice(1).reduce((sum, token) => sum + token.value, 0);
-  }
-
-  const units = extractUnits([col8, col7, row[6] ?? ""]);
-
-  return {
-    label,
-    amount,
-    units,
-    bonus,
-  };
+  return { label, amount, units, bonus };
 }
 
 function looksLikeMonthHeader(firstColumn: string) {
@@ -172,9 +147,31 @@ function looksLikeHeaderRow(row: string[]) {
   return first.includes("date") && second.includes("member");
 }
 
-function isPaySummaryRow(firstColumn: string) {
-  const lowered = firstColumn.toLowerCase();
-  return lowered.includes("pay") || lowered.includes("date");
+function isPaySummaryRow(row: string[]) {
+  const col0 = (row[0] ?? "").trim();
+  const col5 = (row[5] ?? "").trim().replace(/"/g, "");
+  const col6Units = parseUnitsCell(row[6] ?? "");
+  return col0.toLowerCase().includes("pay") || (col0 === "" && col5.startsWith("$") && col6Units > 0);
+}
+
+function isValidMemberName(value: string) {
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  if (DATE_LIKE_VALUE_PATTERN.test(trimmed)) return false;
+  return /[a-z]/i.test(trimmed);
+}
+
+function looksLikeTrainerName(value: string) {
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  if (DATE_LIKE_VALUE_PATTERN.test(trimmed)) return false;
+  return /[a-z]/i.test(trimmed);
+}
+
+function normalizeTrainerName(value: string) {
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  const normalized = TRAINER_NAME_NORMALIZATION[cleaned.toLowerCase()];
+  return normalized ?? cleaned;
 }
 
 function categorizeMembership(value: string): MembershipKey {
@@ -225,6 +222,73 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function formatPayPeriodShortLabel(label: string) {
+  const normalized = label.trim();
+  if (!normalized) return "";
+
+  const namedMonth = normalized.match(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})\b/i
+  );
+  if (namedMonth) {
+    const monthToken = namedMonth[1].slice(0, 3).toLowerCase();
+    const monthIndex = SHORT_MONTHS.findIndex((month) => month.toLowerCase() === monthToken);
+    const day = Number.parseInt(namedMonth[2], 10);
+    if (monthIndex >= 0 && Number.isFinite(day)) {
+      return `${SHORT_MONTHS[monthIndex]} ${day}`;
+    }
+  }
+
+  const numericMonth = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\b/);
+  if (numericMonth) {
+    const monthIndex = Number.parseInt(numericMonth[1], 10) - 1;
+    const day = Number.parseInt(numericMonth[2], 10);
+    if (monthIndex >= 0 && monthIndex < SHORT_MONTHS.length && Number.isFinite(day)) {
+      return `${SHORT_MONTHS[monthIndex]} ${day}`;
+    }
+  }
+
+  return normalized.length > 10 ? `${normalized.slice(0, 10)}...` : normalized;
+}
+
+function formatSvgNumber(value: number) {
+  if (!Number.isFinite(value)) return "0";
+  return value.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
+function buildSmoothLinePath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return "";
+  if (points.length === 1) {
+    return `M ${formatSvgNumber(points[0].x)} ${formatSvgNumber(points[0].y)}`;
+  }
+
+  return points
+    .map((point, index) => {
+      if (index === 0) return `M ${formatSvgNumber(point.x)} ${formatSvgNumber(point.y)}`;
+
+      const previous = points[index - 1];
+      const controlX = (previous.x + point.x) / 2;
+      return `C ${formatSvgNumber(controlX)} ${formatSvgNumber(previous.y)}, ${formatSvgNumber(
+        controlX
+      )} ${formatSvgNumber(point.y)}, ${formatSvgNumber(point.x)} ${formatSvgNumber(point.y)}`;
+    })
+    .join(" ");
+}
+
 function parseCommissionReport(rawRows: CsvRawRow[]) {
   const membershipCounts = buildEmptyMembershipCounts();
   const trainerMap = new Map<string, TrainerCount>();
@@ -249,8 +313,12 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
 
     if (looksLikeMonthHeader(firstColumn)) continue;
 
-    if (isPaySummaryRow(firstColumn)) {
-      payPeriods.push(parsePayPeriodSummary(row, payPeriods.length));
+    if (isPaySummaryRow(row)) {
+      const period = parsePayPeriodSummary(row, payPeriods.length);
+      if (period.amount > 0 || period.bonus > 0 || period.units > 0) {
+        payPeriods.push(period);
+        totalRevenue += period.amount;
+      }
       continue;
     }
 
@@ -258,29 +326,26 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
     const membershipType = row[2] ?? "";
     const trainer = row[4] ?? "";
     const commissionRaw = row[5] ?? "";
-
-    const hasData = [memberName, membershipType, trainer, commissionRaw].some(
-      (cell) => cell.trim() !== ""
-    );
-
-    if (!hasData) continue;
+    if (!isValidMemberName(memberName)) continue;
 
     const commission = parseCommission(commissionRaw);
+    if (commission <= 0) {
+      if (commission < 0) cancellations += 1;
+      continue;
+    }
 
-    totalRevenue += commission;
-    if (commission > 0) totalSales += 1;
-    if (commission < 0) cancellations += 1;
-
+    totalSales += 1;
     membershipCounts[categorizeMembership(membershipType)] += 1;
 
-    if (trainer !== "") {
+    if (looksLikeTrainerName(trainer)) {
       totalFP += 1;
-      const key = trainer.toLowerCase();
+      const normalizedTrainer = normalizeTrainerName(trainer);
+      const key = normalizedTrainer.toLowerCase();
       const existing = trainerMap.get(key);
       if (existing) {
         existing.count += 1;
       } else {
-        trainerMap.set(key, { name: trainer, count: 1 });
+        trainerMap.set(key, { name: normalizedTrainer, count: 1 });
       }
     }
   }
@@ -319,7 +384,9 @@ export function ReportUploader() {
 
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [report, setReport] = useState<CommissionReport | null>(null);
 
@@ -469,6 +536,197 @@ export function ReportUploader() {
             <td colspan="2" style="color:var(--ink-3)">No bonus amounts found in pay period summary rows.</td>
           </tr>`;
 
+    const peakPeriod =
+      report.payPeriods.reduce<PayPeriod | null>((peak, period) => {
+        if (!peak || period.amount > peak.amount) return period;
+        return peak;
+      }, null) ?? null;
+    const lowPeriod =
+      report.payPeriods.reduce<PayPeriod | null>((low, period) => {
+        if (!low || period.amount < low.amount) return period;
+        return low;
+      }, null) ?? null;
+
+    const trendWindowSize = Math.min(3, report.payPeriods.length);
+    const firstTrendPeriods = report.payPeriods.slice(0, trendWindowSize);
+    const lastTrendPeriods = report.payPeriods.slice(-trendWindowSize);
+    const firstTrendAvg =
+      firstTrendPeriods.length > 0
+        ? firstTrendPeriods.reduce((sum, period) => sum + period.amount, 0) / firstTrendPeriods.length
+        : 0;
+    const lastTrendAvg =
+      lastTrendPeriods.length > 0
+        ? lastTrendPeriods.reduce((sum, period) => sum + period.amount, 0) / lastTrendPeriods.length
+        : 0;
+    const trendDelta = lastTrendAvg - firstTrendAvg;
+    const trendPercent = firstTrendAvg > 0 ? (Math.abs(trendDelta) / firstTrendAvg) * 100 : 0;
+    const trendDirectionUp = trendDelta >= 0;
+    const trendText =
+      trendWindowSize > 0
+        ? `${trendDirectionUp ? "↑" : "↓"} ${formatPercent(trendPercent)} trending ${
+            trendDirectionUp ? "up" : "down"
+          }`
+        : "No trend data";
+
+    const W = 860;
+    const H = 160;
+    const PAD = { top: 10, right: 20, bottom: 30, left: 50 };
+    const baselineY = H - PAD.bottom;
+    const amounts = report.payPeriods.map((period) => period.amount);
+    const minVal = amounts.length > 0 ? Math.min(...amounts) : 0;
+    const maxVal = amounts.length > 0 ? Math.max(...amounts) : 0;
+    const range = maxVal - minVal;
+    const xStep =
+      report.payPeriods.length > 1 ? (W - PAD.left - PAD.right) / (report.payPeriods.length - 1) : 0;
+    const toX = (index: number) => PAD.left + index * xStep;
+    const toY = (value: number) => {
+      if (amounts.length === 0) return baselineY;
+      if (range === 0) return PAD.top + (H - PAD.top - PAD.bottom) / 2;
+      return PAD.top + (H - PAD.top - PAD.bottom) * (1 - (value - minVal) / range);
+    };
+
+    const trendPoints = report.payPeriods.map((period, index) => ({
+      period,
+      shortLabel: formatPayPeriodShortLabel(period.label),
+      x: toX(index),
+      y: toY(period.amount),
+    }));
+
+    const linePath = buildSmoothLinePath(trendPoints.map(({ x, y }) => ({ x, y })));
+    const areaPath =
+      trendPoints.length > 1 && linePath
+        ? `${linePath} L ${formatSvgNumber(trendPoints[trendPoints.length - 1].x)} ${formatSvgNumber(
+            baselineY
+          )} L ${formatSvgNumber(trendPoints[0].x)} ${formatSvgNumber(baselineY)} Z`
+        : "";
+
+    const gridLinesHTML = Array.from({ length: 5 }, (_, index) => {
+      const ratio = index / 4;
+      const y = PAD.top + (H - PAD.top - PAD.bottom) * ratio;
+      const value = maxVal - (maxVal - minVal) * ratio;
+
+      return `<g>
+        <line class="pay-trend-grid-line" x1="${formatSvgNumber(PAD.left)}" y1="${formatSvgNumber(
+          y
+        )}" x2="${formatSvgNumber(W - PAD.right)}" y2="${formatSvgNumber(y)}"></line>
+        <text class="pay-trend-y-label" x="${formatSvgNumber(PAD.left - 8)}" y="${formatSvgNumber(
+          y + 3
+        )}" text-anchor="end">${formatCurrency(value)}</text>
+      </g>`;
+    }).join("");
+
+    const xLabelsHTML = trendPoints
+      .map(
+        (point) =>
+          `<text class="pay-trend-x-label" x="${formatSvgNumber(point.x)}" y="${formatSvgNumber(
+            H - 8
+          )}" text-anchor="middle">${escapeHtml(point.shortLabel)}</text>`
+      )
+      .join("");
+
+    const pointMarkersHTML = trendPoints
+      .map((point) => {
+        const detailRows = [
+          point.period.label,
+          `Commission: ${formatCurrency(point.period.amount)}`,
+          `Units: ${formatUnits(point.period.units)}`,
+          point.period.bonus > 0 ? `Bonus: +${formatCurrency(point.period.bonus)}` : null,
+        ].filter(Boolean) as string[];
+        const tooltipHeight = 12 + detailRows.length * 13;
+        const tooltipWidth = 210;
+        const tooltipX = Math.min(
+          Math.max(point.x - tooltipWidth / 2, PAD.left),
+          W - PAD.right - tooltipWidth
+        );
+        const tooltipY = Math.max(4, point.y - tooltipHeight - 10);
+        const tooltipRowsHTML = detailRows
+          .map(
+            (line, index) =>
+              `<text class="pay-trend-tooltip-line${
+                index === 0 ? " pay-trend-tooltip-title" : ""
+              }" x="10" y="${16 + index * 13}">${escapeHtml(line)}</text>`
+          )
+          .join("");
+
+        return `<g class="pay-trend-point-group">
+          <circle class="pay-trend-point-hit" cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(
+            point.y
+          )}" r="10"></circle>
+          <circle class="pay-trend-point" cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(
+            point.y
+          )}" r="3.5"></circle>
+          <g class="pay-trend-tooltip" transform="translate(${formatSvgNumber(tooltipX)} ${formatSvgNumber(
+            tooltipY
+          )})">
+            <rect rx="6" ry="6" width="${tooltipWidth}" height="${tooltipHeight}"></rect>
+            ${tooltipRowsHTML}
+          </g>
+          <title>${escapeHtml(detailRows.join("\n"))}</title>
+        </g>`;
+      })
+      .join("");
+
+    const payTrendStatsHTML =
+      report.payPeriods.length > 0
+        ? `
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Peak</div>
+        <div class="pay-trend-stat-value">${peakPeriod ? formatCurrency(peakPeriod.amount) : "-"}</div>
+        <div class="pay-trend-stat-sub">${peakPeriod ? escapeHtml(peakPeriod.label) : "-"}</div>
+      </div>
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Low</div>
+        <div class="pay-trend-stat-value">${lowPeriod ? formatCurrency(lowPeriod.amount) : "-"}</div>
+        <div class="pay-trend-stat-sub">${lowPeriod ? escapeHtml(lowPeriod.label) : "-"}</div>
+      </div>
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Trend</div>
+        <div class="pay-trend-stat-value ${trendDirectionUp ? "up" : "down"}">${trendText}</div>
+        <div class="pay-trend-stat-sub">last ${trendWindowSize} avg ${formatCurrency(
+            lastTrendAvg
+          )} vs first ${trendWindowSize} avg ${formatCurrency(firstTrendAvg)}</div>
+      </div>`
+        : `
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Peak</div>
+        <div class="pay-trend-stat-value">-</div>
+        <div class="pay-trend-stat-sub">No pay period rows</div>
+      </div>
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Low</div>
+        <div class="pay-trend-stat-value">-</div>
+        <div class="pay-trend-stat-sub">No pay period rows</div>
+      </div>
+      <div class="pay-trend-stat">
+        <div class="pay-trend-stat-label">Trend</div>
+        <div class="pay-trend-stat-value">-</div>
+        <div class="pay-trend-stat-sub">Need at least one pay period</div>
+      </div>`;
+
+    const payTrendChartHTML =
+      report.payPeriods.length > 0
+        ? `
+      <div class="pay-trend-chart-scroll">
+        <div class="pay-trend-chart-wrap">
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Pay period trend chart" role="img">
+            ${gridLinesHTML}
+            ${
+              areaPath
+                ? `<path class="pay-trend-area" d="${areaPath}"></path>`
+                : ""
+            }
+            ${
+              linePath
+                ? `<path class="pay-trend-line" d="${linePath}"></path>`
+                : ""
+            }
+            ${pointMarkersHTML}
+            ${xLabelsHTML}
+          </svg>
+        </div>
+      </div>`
+        : `<div class="pay-trend-empty">No pay period summary rows found.</div>`;
+
     const generatedDate = new Date().toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -584,6 +842,87 @@ export function ReportUploader() {
   }
   .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
+  /* PAY PERIOD TREND */
+  .pay-trend-card { margin-bottom: 22px; }
+  .pay-trend-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--paper-3);
+  }
+  .pay-trend-stat { min-width: 170px; flex: 1; }
+  .pay-trend-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .pay-trend-stat-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .pay-trend-stat-value.up { color: var(--green); }
+  .pay-trend-stat-value.down { color: #b42318; }
+  .pay-trend-stat-sub {
+    margin-top: 4px;
+    color: var(--ink-3);
+    font-size: 11px;
+  }
+  .pay-trend-chart-scroll { width: 100%; overflow-x: auto; }
+  .pay-trend-chart-wrap { height: 200px; min-width: 720px; }
+  .pay-trend-chart-wrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .pay-trend-grid-line { stroke: var(--paper-3); stroke-width: 1; }
+  .pay-trend-y-label, .pay-trend-x-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    fill: var(--ink-3);
+  }
+  .pay-trend-line {
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .pay-trend-area { fill: var(--accent); fill-opacity: 0.1; }
+  .pay-trend-point-group { cursor: default; }
+  .pay-trend-point-hit { fill: transparent; }
+  .pay-trend-point { fill: var(--accent); stroke: white; stroke-width: 1.5; }
+  .pay-trend-tooltip {
+    opacity: 0;
+    transition: opacity 0.12s ease-out;
+    pointer-events: none;
+  }
+  .pay-trend-point-group:hover .pay-trend-tooltip { opacity: 1; }
+  .pay-trend-tooltip rect { fill: rgba(15, 15, 15, 0.95); }
+  .pay-trend-tooltip-line {
+    fill: #f7f5f0;
+    font-size: 10px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .pay-trend-tooltip-title {
+    fill: #ffffff;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+  }
+  .pay-trend-empty {
+    height: 200px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-3);
+    font-size: 12px;
+  }
+
   /* PAY PERIOD TABLE */
   .pay-table { width: 100%; border-collapse: collapse; margin-bottom: 36px; }
   .pay-table thead tr { border-bottom: 1.5px solid var(--ink); }
@@ -682,9 +1021,9 @@ export function ReportUploader() {
 
   <div class="hero-banner">
     <div class="hero-left">
-      <div class="hero-label">Total Commissions Earned</div>
+      <div class="hero-label">Verified Commission (Pay Period Totals)</div>
       <div class="hero-amount">${formatCurrency(report.totalRevenue)}</div>
-      <div class="hero-sub">Across ${report.payPeriods.length} pay periods &middot; ${report.totalSales} members sold</div>
+      <div class="hero-sub">Commission ${formatCurrency(report.totalRevenue)} + Bonuses ${formatCurrency(report.totalBonuses)} across ${report.payPeriods.length} pay periods</div>
       <div class="hero-badges">
         <span class="hero-badge badge-green">
           <span style="width:5px;height:5px;border-radius:50%;background:#7ad39f;flex-shrink:0"></span>
@@ -750,6 +1089,14 @@ export function ReportUploader() {
       <div class="stat-value">${formatCurrency(avgPayPeriod)}</div>
       <div class="stat-sub accent">${report.payPeriods.length} pay periods</div>
     </div>
+  </div>
+
+  <div class="card pay-trend-card">
+    <div class="card-title">Pay Period Trend</div>
+    <div class="pay-trend-stats">
+      ${payTrendStatsHTML}
+    </div>
+    ${payTrendChartHTML}
   </div>
 
   <div class="section-label">Pay Period Breakdown</div>
@@ -842,7 +1189,7 @@ export function ReportUploader() {
 </div>`;
   }, [report]);
 
-  function parseFile(file: File) {
+  function parseFile(file: File, onSuccess?: () => void) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setParseError("Please upload a .csv file.");
       setReport(null);
@@ -876,6 +1223,7 @@ export function ReportUploader() {
 
         setReport(parsed);
         setFileName(file.name);
+        onSuccess?.();
       },
       error: (error) => {
         setParseError(`Unable to parse CSV: ${error.message}`);
@@ -896,6 +1244,31 @@ export function ReportUploader() {
   function onInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) parseFile(file);
+  }
+
+  async function syncFromGoogleSheets() {
+    if (isSyncing) return;
+
+    setIsSyncing(true);
+    setParseError(null);
+
+    try {
+      const response = await fetch(GOOGLE_SHEETS_SYNC_URL);
+
+      if (!response.ok) {
+        throw new Error(`Unable to fetch sheet: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+      const syncedFile = new File([csvText], "google-sheets-sync.csv", { type: "text/csv" });
+      parseFile(syncedFile, () => setLastSyncedAt(new Date()));
+    } catch {
+      setParseError(
+        "Could not access sheet. Make sure it's set to 'Anyone with the link can view' in Google Sheets sharing settings."
+      );
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   async function exportPdf() {
@@ -1017,6 +1390,35 @@ export function ReportUploader() {
             className="hidden"
             onChange={onInputChange}
           />
+
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <Button
+              type="button"
+              onClick={syncFromGoogleSheets}
+              disabled={isSyncing}
+              className="h-10 border border-[#2f2f2f] bg-[#0f0f0f] px-4 text-sm font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                "Sync from Google Sheets"
+              )}
+            </Button>
+
+            {lastSyncedAt ? (
+              <p className="text-sm text-[#5b5b5b]">
+                Last synced:{" "}
+                {lastSyncedAt.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </p>
+            ) : null}
+          </div>
 
           <div
             role="button"
