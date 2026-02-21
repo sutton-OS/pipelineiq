@@ -21,6 +21,10 @@ type PayPeriod = {
   bonus: number;
 };
 
+type YearTaggedPayPeriod = PayPeriod & {
+  year: number | null;
+};
+
 type TrainerCount = {
   name: string;
   count: number;
@@ -48,6 +52,22 @@ type CommissionReport = {
   bestPeriod: PayPeriod | null;
   cancellations: number;
   currentPayPeriod: CurrentPayPeriod;
+};
+
+type ParsedTransactionRow = {
+  year: number | null;
+  commission: number;
+  units: number;
+  membershipType: MembershipKey;
+  trainerName: string;
+  hasTrainer: boolean;
+  inCurrentPayPeriod: boolean;
+};
+
+type ParsedCommissionData = {
+  payPeriods: YearTaggedPayPeriod[];
+  transactionRows: ParsedTransactionRow[];
+  periodLabel: string;
 };
 
 const MONTH_HEADER_PATTERN =
@@ -145,6 +165,15 @@ function parsePayPeriodSummary(row: string[], index: number): PayPeriod {
   const bonus = parseBonusFromPayPeriodRow(row);
 
   return { label, amount, units, bonus };
+}
+
+function detectYearFromLabel(label: string) {
+  if (label.includes("2026") || /\/26\b/.test(label)) return 2026;
+  if (label.includes("2025") || /\/25\b/.test(label)) return 2025;
+
+  const parsed = new Date(label);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+  return null;
 }
 
 function getCurrentPayPeriodRange() {
@@ -355,21 +384,14 @@ function buildSmoothLinePath(points: Array<{ x: number; y: number }>) {
     .join(" ");
 }
 
-function parseCommissionReport(rawRows: CsvRawRow[]) {
-  const membershipCounts = buildEmptyMembershipCounts();
-  const trainerMap = new Map<string, TrainerCount>();
-  const payPeriods: PayPeriod[] = [];
+function parseCommissionData(rawRows: CsvRawRow[]) {
+  const payPeriods: YearTaggedPayPeriod[] = [];
+  const transactionRows: ParsedTransactionRow[] = [];
   const { periodLabel, periodStart, periodEnd } = getCurrentPayPeriodRange();
 
-  let totalSales = 0;
-  let totalFP = 0;
-  let cancellations = 0;
-  let currentCommission = 0;
-  let currentUnits = 0;
-  let currentSales = 0;
-  let currentFP = 0;
-  const currentPeriodRows: Array<{ trainer: string }> = [];
   let headerSkipped = false;
+  let scanYear = 2025;
+  const currentCalendarYear = new Date().getFullYear();
   const periodStartTime = periodStart.getTime();
   const periodEndTime = periodEnd.getTime();
 
@@ -388,48 +410,72 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
 
     if (isPaySummaryRow(row)) {
       const period = parsePayPeriodSummary(row, payPeriods.length);
+      const periodYear = detectYearFromLabel(period.label);
+      if (periodYear !== null) scanYear = periodYear;
       if (period.amount > 0 || period.bonus > 0 || period.units > 0) {
-        payPeriods.push(period);
+        payPeriods.push({ ...period, year: periodYear });
       }
       continue;
     }
 
     const memberName = row[1] ?? "";
-    const membershipType = row[2] ?? "";
+    const membershipTypeRaw = row[2] ?? "";
     const trainer = row[4] ?? "";
     const commissionRaw = row[5] ?? "";
     if (!isValidMemberName(memberName)) continue;
 
     const commission = parseCommission(commissionRaw);
     const units = parseUnitsCell(row[6] ?? "");
-    const transactionDate = parseTransactionDate(firstColumn, periodStart.getFullYear());
+    const fallbackRowYear = scanYear;
+    const transactionDate = parseTransactionDate(firstColumn, fallbackRowYear);
     const transactionTime = transactionDate?.getTime();
+    const rowYear = transactionDate ? transactionDate.getFullYear() : fallbackRowYear;
     const inCurrentPayPeriod =
+      rowYear === currentCalendarYear &&
       transactionTime !== undefined &&
       transactionTime >= periodStartTime &&
       transactionTime <= periodEndTime;
 
-    if (inCurrentPayPeriod) {
-      currentCommission += commission;
-      currentUnits += units;
-      if (commission > 0) {
-        currentSales += 1;
-        currentPeriodRows.push({ trainer: trainer.trim() });
-      }
-      if (looksLikeTrainerName(trainer)) currentFP += 1;
-    }
+    transactionRows.push({
+      year: rowYear,
+      commission,
+      units,
+      membershipType: categorizeMembership(membershipTypeRaw),
+      trainerName: trainer.trim(),
+      hasTrainer: looksLikeTrainerName(trainer),
+      inCurrentPayPeriod,
+    });
+  }
 
-    if (commission <= 0) {
-      if (commission < 0) cancellations += 1;
+  return {
+    payPeriods,
+    transactionRows,
+    periodLabel,
+  } satisfies ParsedCommissionData;
+}
+
+function buildCommissionReport(data: ParsedCommissionData, selectedYear: number) {
+  const membershipCounts = buildEmptyMembershipCounts();
+  const trainerMap = new Map<string, TrainerCount>();
+  const thisYearPeriods = data.payPeriods.filter((period) => period.year === selectedYear);
+  const thisYearRows = data.transactionRows.filter((row) => row.year === selectedYear);
+
+  let totalSales = 0;
+  let totalFP = 0;
+  let cancellations = 0;
+
+  for (const row of thisYearRows) {
+    if (row.commission <= 0) {
+      if (row.commission < 0) cancellations += 1;
       continue;
     }
 
     totalSales += 1;
-    membershipCounts[categorizeMembership(membershipType)] += 1;
+    membershipCounts[row.membershipType] += 1;
 
-    if (looksLikeTrainerName(trainer)) {
+    if (row.hasTrainer) {
       totalFP += 1;
-      const normalizedTrainer = normalizeTrainerName(trainer);
+      const normalizedTrainer = normalizeTrainerName(row.trainerName);
       const key = normalizedTrainer.toLowerCase();
       const existing = trainerMap.get(key);
       if (existing) {
@@ -443,14 +489,6 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
   const trainerCounts = Array.from(trainerMap.values()).sort(
     (a, b) => b.count - a.count || a.name.localeCompare(b.name)
   );
-
-  const currentYear = new Date().getFullYear();
-  const currentYearSuffix = String(currentYear).slice(-2);
-  const thisYearPeriods = payPeriods.filter(
-    (period) =>
-      period.label.includes(String(currentYear)) || period.label.includes(`/${currentYearSuffix}`)
-  );
-
   const totalRevenue = thisYearPeriods.reduce((sum, period) => sum + period.amount, 0);
   const totalBonuses = thisYearPeriods.reduce((sum, period) => sum + period.bonus, 0);
   const bestPeriod =
@@ -458,6 +496,14 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
       if (!best || current.amount > best.amount) return current;
       return best;
     }, null) ?? null;
+
+  const currentPeriodRowsForYear = thisYearRows.filter((row) => row.inCurrentPayPeriod);
+  const currentCommission = currentPeriodRowsForYear.reduce((sum, row) => sum + row.commission, 0);
+  const currentUnits = currentPeriodRowsForYear.reduce((sum, row) => sum + row.units, 0);
+  const currentSalesRows = currentPeriodRowsForYear.filter((row) => row.commission > 0);
+  const currentSales = currentSalesRows.length;
+  const currentFP = currentPeriodRowsForYear.filter((row) => row.hasTrainer).length;
+  const currentPeriodRows = currentSalesRows.map((row) => ({ trainer: row.trainerName }));
 
   const fpRate = totalSales > 0 ? (totalFP / totalSales) * 100 : 0;
   const avgCommission = totalSales > 0 ? totalRevenue / totalSales : 0;
@@ -470,12 +516,17 @@ function parseCommissionReport(rawRows: CsvRawRow[]) {
     avgCommission,
     membershipCounts,
     trainerCounts,
-    payPeriods: thisYearPeriods,
+    payPeriods: thisYearPeriods.map(({ label, amount, units, bonus }) => ({
+      label,
+      amount,
+      units,
+      bonus,
+    })),
     totalBonuses,
     bestPeriod,
     cancellations,
     currentPayPeriod: {
-      periodLabel,
+      periodLabel: data.periodLabel,
       currentCommission,
       currentUnits,
       currentSales,
@@ -494,7 +545,34 @@ export function ReportUploader() {
   const [fileName, setFileName] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [report, setReport] = useState<CommissionReport | null>(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(null);
+
+  const availableYears = useMemo(() => {
+    if (!parsedData) return [];
+
+    const years = parsedData.payPeriods
+      .map((period) => period.year ?? detectYearFromLabel(period.label))
+      .filter((year): year is number => typeof year === "number");
+
+    return [...new Set(years)].sort((a, b) => a - b);
+  }, [parsedData]);
+
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+    if (availableYears.includes(selectedYear)) return;
+
+    const currentYear = new Date().getFullYear();
+    const fallbackYear = availableYears.includes(currentYear)
+      ? currentYear
+      : availableYears[availableYears.length - 1];
+    setSelectedYear(fallbackYear);
+  }, [availableYears, selectedYear]);
+
+  const report = useMemo(() => {
+    if (!parsedData) return null;
+    return buildCommissionReport(parsedData, selectedYear);
+  }, [parsedData, selectedYear]);
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -539,9 +617,12 @@ export function ReportUploader() {
 
     const today = new Date();
     const day = today.getDate();
-    const year = today.getFullYear();
+    const currentYear = today.getFullYear();
+    const isCurrentYearView = selectedYear === currentYear;
     const periodEndDate =
-      day <= 15 ? new Date(year, today.getMonth(), 15) : new Date(year, today.getMonth() + 1, 0);
+      day <= 15
+        ? new Date(currentYear, today.getMonth(), 15)
+        : new Date(currentYear, today.getMonth() + 1, 0);
     const msPerDay = 1000 * 60 * 60 * 24;
     const daysLeft = Math.max(Math.ceil((periodEndDate.getTime() - today.getTime()) / msPerDay), 1);
     const dailyNeeded = remaining > 0 ? (remaining / daysLeft).toFixed(2) : 0;
@@ -1004,6 +1085,17 @@ export function ReportUploader() {
     color: rgba(255,255,255,0.45);
     font-size: 12px;
   }
+  .historical-period-note {
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+    background: white;
+    color: var(--ink-3);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    text-align: center;
+    padding: 14px 16px;
+  }
   .current-goal-block { margin-top: 14px; }
   .current-goal-meta {
     display: flex;
@@ -1409,7 +1501,9 @@ export function ReportUploader() {
     </div>
   </div>
 
-  <div class="current-period-card">
+  ${
+    isCurrentYearView
+      ? `<div class="current-period-card">
     <div class="current-period-badge">
       <span class="pulse-dot"></span>
       CURRENT PERIOD
@@ -1431,8 +1525,8 @@ export function ReportUploader() {
     <div class="current-goal-block">
       <div class="current-goal-meta">
         <span class="current-goal-meta-text">${formatCurrency(currentCommission)} of ${formatCurrency(
-      GOAL
-    )} goal</span>
+          GOAL
+        )} goal</span>
       </div>
       <div class="current-goal-bar">
         <div class="current-goal-fill" data-goal-width="${formatSvgNumber(goalPercent)}" style="background:${goalFillColor}"></div>
@@ -1511,13 +1605,15 @@ export function ReportUploader() {
     <div class="current-period-footer">
       ${report.currentPayPeriod.currentSales} members sold &middot; ${report.currentPayPeriod.currentFP} fitness profiles
     </div>
-  </div>
+  </div>`
+      : `<div class="historical-period-note">Viewing historical data for ${selectedYear}</div>`
+  }
 
   <div class="hero-banner">
     <div class="hero-left">
       <div class="hero-label">Verified Commission (Pay Period Totals)</div>
       <div class="hero-amount">${formatCurrency(report.totalRevenue)}</div>
-      <div class="hero-sub">${year} earnings &middot; ${report.payPeriods.length} pay periods</div>
+      <div class="hero-sub">${selectedYear} earnings &middot; ${report.payPeriods.length} pay periods</div>
       <div class="hero-badges">
         <span class="hero-badge badge-green">
           <span style="width:5px;height:5px;border-radius:50%;background:#7ad39f;flex-shrink:0"></span>
@@ -1681,12 +1777,12 @@ export function ReportUploader() {
     <div class="footer-note">Generated ${generatedDate} &middot; Tyler &middot; GGIF Commissions</div>
   </div>
 </div>`;
-  }, [report]);
+  }, [report, selectedYear]);
 
   function parseFile(file: File, onSuccess?: () => void) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setParseError("Please upload a .csv file.");
-      setReport(null);
+      setParsedData(null);
       setFileName("");
       return;
     }
@@ -1701,27 +1797,28 @@ export function ReportUploader() {
 
         if (rawRows.length === 0) {
           setParseError("No valid rows found in this CSV.");
-          setReport(null);
+          setParsedData(null);
           setFileName("");
           return;
         }
 
-        const parsed = parseCommissionReport(rawRows);
+        const parsed = parseCommissionData(rawRows);
+        const hasPositiveSales = parsed.transactionRows.some((row) => row.commission > 0);
 
-        if (parsed.totalSales === 0 && parsed.payPeriods.length === 0) {
+        if (!hasPositiveSales && parsed.payPeriods.length === 0) {
           setParseError("No commission data found after applying parsing rules.");
-          setReport(null);
+          setParsedData(null);
           setFileName("");
           return;
         }
 
-        setReport(parsed);
+        setParsedData(parsed);
         setFileName(file.name);
         onSuccess?.();
       },
       error: (error) => {
         setParseError(`Unable to parse CSV: ${error.message}`);
-        setReport(null);
+        setParsedData(null);
         setFileName("");
       },
     });
@@ -1969,7 +2066,43 @@ export function ReportUploader() {
           ) : null}
         </div>
 
-        {report ? <div dangerouslySetInnerHTML={{ __html: reportHTML }} /> : null}
+        {report ? (
+          <div className="space-y-3">
+            {availableYears.length > 0 ? (
+              <div className="flex items-center justify-end gap-2">
+                <span
+                  className="text-[11px] text-[#888]"
+                  style={{ fontFamily: "'DM Mono', monospace" }}
+                >
+                  Viewing:
+                </span>
+                <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
+                  {availableYears.map((year) => {
+                    const isActive = year === selectedYear;
+                    return (
+                      <button
+                        key={year}
+                        type="button"
+                        onClick={() => setSelectedYear(year)}
+                        className="rounded-md px-[14px] py-[6px] text-xs transition-colors"
+                        style={{
+                          fontFamily: "'DM Mono', monospace",
+                          backgroundColor: isActive
+                            ? "var(--ink, #0f0f0f)"
+                            : "var(--paper-2, #eceae4)",
+                          color: isActive ? "white" : "var(--ink-3, #888)",
+                        }}
+                      >
+                        {year}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <div dangerouslySetInnerHTML={{ __html: reportHTML }} />
+          </div>
+        ) : null}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#232323] bg-[#0f0f0f] px-4 py-4 sm:px-6 lg:px-8">

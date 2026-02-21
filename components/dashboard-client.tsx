@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 type DeltaTone = "positive" | "negative" | "neutral";
 
@@ -141,6 +142,8 @@ export function DashboardClient(props: DashboardClientProps) {
     timeToCloseRows,
     activityBreakdown,
   } = props;
+  const [isEnqueueing, setIsEnqueueing] = useState(false);
+  const isDev = process.env.NODE_ENV !== "production";
 
   const dealDistribution = useMemo(() => {
     const buckets = [
@@ -188,6 +191,29 @@ export function DashboardClient(props: DashboardClientProps) {
     [],
   );
 
+  async function handleEnqueueTestJob() {
+    if (isEnqueueing) return;
+    setIsEnqueueing(true);
+
+    try {
+      const response = await fetch("/api/dev/enqueue-hello", { method: "POST" });
+      if (!response.ok) {
+        let message = "Failed to enqueue test job.";
+        try {
+          const body = (await response.json()) as { error?: string };
+          if (body.error) message = body.error;
+        } catch {}
+        throw new Error(message);
+      }
+      toast.success("Test job queued.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to enqueue test job.";
+      toast.error(message);
+    } finally {
+      setIsEnqueueing(false);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[960px] px-2 pb-20 pt-8 md:px-4 md:pt-12">
       <header className="mb-9 flex flex-col gap-6 border-b-2 border-[var(--ink)] pb-7 md:flex-row md:items-start md:justify-between">
@@ -202,6 +228,16 @@ export function DashboardClient(props: DashboardClientProps) {
           <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--ink-3)]">
             {teamName} · {reportName} · {periodLabel}
           </p>
+          {isDev ? (
+            <button
+              type="button"
+              onClick={handleEnqueueTestJob}
+              disabled={isEnqueueing}
+              className="mt-3 inline-flex h-8 items-center justify-center rounded-md border border-[var(--border)] px-3 text-[11px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50 md:ml-auto"
+            >
+              {isEnqueueing ? "Enqueueing..." : "Enqueue test job"}
+            </button>
+          ) : null}
         </div>
       </header>
 
