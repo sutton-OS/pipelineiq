@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --ink: #0f0f0f;
-  --ink-2: #3a3a3a;
-  --ink-3: #888888;
-  --paper: #000000;
-  --paper-2: #eceae4;
-  --paper-3: #e0ddd6;
+  --ink: #f0f2f5;
+  --ink-2: #9aa0b0;
+  --ink-3: #5a6070;
+  --paper: #16181d;
+  --paper-2: #1e2028;
+  --paper-3: #25282f;
   --accent: #c8491a;
   --accent-light: #f5e8e2;
   --green: #1a6e3c;
   --green-light: #e2f0e8;
   --amber: #b07d00;
   --amber-light: #fdf4d8;
-  --border: #d8d5ce;
+  --border: #2e3340;
 }
 
 body {
