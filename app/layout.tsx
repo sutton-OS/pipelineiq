@@ -68,8 +68,10 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
     >
-      <body>
-        <ClerkProvider>{children}</ClerkProvider>
+      <body className="min-h-screen bg-background font-sans antialiased">
+        <ClerkProvider>
+          {children}
+        </ClerkProvider>
         <Toaster position="top-right" richColors />
       </body>
     </html>
