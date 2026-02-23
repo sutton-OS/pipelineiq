@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireUserId } from "@/lib/auth";
 import {
+  DEFAULT_GOLDBOT_AUTONOMY_MODE,
+  DEFAULT_GOLDBOT_BOOKING_PROVIDER,
+  DEFAULT_GOLDBOT_BOOKING_SETTINGS,
   createInboundMessageAndEnqueue,
   createLeadAndEnqueue,
   DEFAULT_GOLDBOT_BUSINESS_HOURS,
@@ -45,6 +48,18 @@ function toConsentStatus(value: string): "unknown" | "consented" | "revoked" {
 
 function parseBoolean(value: FormDataEntryValue | null): boolean {
   return String(value ?? "").toLowerCase() === "true";
+}
+
+function toAutonomyMode(value: FormDataEntryValue | null): "suggest_only" | "safe_auto" {
+  return String(value ?? "") === "suggest_only" ? "suggest_only" : "safe_auto";
+}
+
+function toBookingProvider(value: FormDataEntryValue | null): "none" | "google_calendar" | "calendly" {
+  const normalized = String(value ?? "").trim();
+  if (normalized === "google_calendar" || normalized === "calendly" || normalized === "none") {
+    return normalized;
+  }
+  return "none";
 }
 
 export async function createLeadIntakeAction(formData: FormData): Promise<ActionResult> {
@@ -151,6 +166,8 @@ export async function updateAutomationSettingsAction(formData: FormData): Promis
   try {
     const userId = await requireUserId();
     const timezone = String(formData.get("timezone") ?? "America/New_York").trim();
+    const autonomyMode = toAutonomyMode(formData.get("autonomyMode"));
+    const bookingProvider = toBookingProvider(formData.get("bookingProvider"));
 
     const businessHoursJson = parseJsonField(
       formData,
@@ -170,9 +187,18 @@ export async function updateAutomationSettingsAction(formData: FormData): Promis
       DEFAULT_GOLDBOT_THROTTLE_CAPS,
     );
 
+    const bookingSettingsJson = parseJsonField(
+      formData,
+      "bookingSettingsJson",
+      DEFAULT_GOLDBOT_BOOKING_SETTINGS,
+    );
+
     await updateLocationSettings({
       userId,
       timezone,
+      autonomyMode: autonomyMode || DEFAULT_GOLDBOT_AUTONOMY_MODE,
+      bookingProvider: bookingProvider || DEFAULT_GOLDBOT_BOOKING_PROVIDER,
+      bookingSettingsJson,
       businessHoursJson,
       templatesJson,
       throttleCapsJson,

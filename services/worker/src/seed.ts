@@ -1,6 +1,9 @@
 import { pool, query } from "./db";
 import {
+  DEFAULT_AUTONOMY_MODE,
   DEFAULT_BUSINESS_HOURS,
+  DEFAULT_BOOKING_PROVIDER,
+  DEFAULT_BOOKING_SETTINGS,
   DEFAULT_THROTTLE_CAPS,
   DEFAULT_TEMPLATES,
   ensureSchema,
@@ -44,14 +47,20 @@ async function main(): Promise<void> {
         org_id,
         name,
         timezone,
+        autonomy_mode,
+        booking_provider,
+        booking_settings_json,
         business_hours_json,
         templates_json,
         throttle_caps_json
       )
-      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb)
       ON CONFLICT (org_id, name)
       DO UPDATE SET
         timezone = EXCLUDED.timezone,
+        autonomy_mode = EXCLUDED.autonomy_mode,
+        booking_provider = EXCLUDED.booking_provider,
+        booking_settings_json = EXCLUDED.booking_settings_json,
         business_hours_json = EXCLUDED.business_hours_json,
         templates_json = EXCLUDED.templates_json,
         throttle_caps_json = EXCLUDED.throttle_caps_json,
@@ -62,6 +71,9 @@ async function main(): Promise<void> {
       orgId,
       "Main Location",
       "America/New_York",
+      DEFAULT_AUTONOMY_MODE,
+      DEFAULT_BOOKING_PROVIDER,
+      JSON.stringify(DEFAULT_BOOKING_SETTINGS),
       JSON.stringify(DEFAULT_BUSINESS_HOURS),
       JSON.stringify(DEFAULT_TEMPLATES),
       JSON.stringify(DEFAULT_THROTTLE_CAPS),
@@ -119,6 +131,19 @@ async function main(): Promise<void> {
   );
 
   const conversationId = conversationResult.rows[0].id;
+
+  await query(
+    `
+      INSERT INTO org_memberships (org_id, user_id, role, status)
+      VALUES ($1, $2, 'owner', 'active')
+      ON CONFLICT (org_id, user_id)
+      DO UPDATE SET
+        role = EXCLUDED.role,
+        status = EXCLUDED.status,
+        updated_at = now()
+    `,
+    [orgId, "dev-user-123"],
+  );
 
   await query(
     `

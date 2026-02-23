@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import { ensureOrgAndLocation, listAuditEntries } from "@/lib/goldbot";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -34,11 +36,16 @@ export default async function AuditPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-4xl font-serif">Audit Log</h1>
-        <p className="text-sm text-ink-2">
-          Policy decisions and action attempts from the ActionGateway.
-        </p>
+      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-serif">Audit Log</h1>
+          <p className="text-sm text-ink-2">
+            Policy decisions and action attempts from the ActionGateway.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/api/audit/export?limit=5000">Download CSV Export</Link>
+        </Button>
       </header>
 
       <Card className="border-border bg-white/70">

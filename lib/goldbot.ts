@@ -1,4 +1,5 @@
 import { pgPool } from "@/lib/pg";
+import { requireAuthContext, type AppRole } from "@/lib/auth";
 
 export const DEFAULT_GOLDBOT_BUSINESS_HOURS = {
   mon: [{ start: "09:00", end: "17:00" }],
@@ -32,11 +33,22 @@ export const DEFAULT_GOLDBOT_THROTTLE_CAPS = {
   invalid_response_limit: 3,
 };
 
+export const DEFAULT_GOLDBOT_AUTONOMY_MODE = "safe_auto" as const;
+export const DEFAULT_GOLDBOT_BOOKING_PROVIDER = "none" as const;
+export const DEFAULT_GOLDBOT_BOOKING_SETTINGS = {} as const;
+
+export type LocationAutonomyMode = "suggest_only" | "safe_auto";
+export type LocationBookingProvider = "none" | "google_calendar" | "calendly";
+
 export type OrgLocationContext = {
   orgId: string;
   locationId: string;
   locationName: string;
   timezone: string;
+  role: AppRole;
+  clerkOrgId: string | null;
+  autonomyMode: LocationAutonomyMode;
+  bookingProvider: LocationBookingProvider;
 };
 
 export type LeadListItem = {
@@ -111,6 +123,19 @@ export type AuditListItem = {
   resultJson: Record<string, unknown> | null;
 };
 
+export type AuditExportRow = {
+  id: string;
+  actionType: string;
+  policyVersion: string;
+  success: boolean;
+  createdAt: string;
+  decisionJson: Record<string, unknown> | null;
+  resultJson: Record<string, unknown> | null;
+  errorMessage: string | null;
+  leadId: string | null;
+  conversationId: string | null;
+};
+
 export type DashboardSummary = {
   totalLeads: number;
   bookedConversations: number;
@@ -118,7 +143,10 @@ export type DashboardSummary = {
   awaitingTimeChoice: number;
   staffAttention: number;
   deadJobs: number;
+  queuedJobs: number;
+  runningJobs: number;
   outboundLast24h: number;
+  optOutEventsLast7d: number;
   recentMessages: Array<{
     id: string;
     leadName: string;
@@ -126,6 +154,22 @@ export type DashboardSummary = {
     status: string;
     body: string;
     createdAt: string;
+  }>;
+  recentSendFailures: Array<{
+    id: string;
+    leadName: string;
+    errorMessage: string | null;
+    createdAt: string;
+  }>;
+  recentOptOutEvents: Array<{
+    leadId: string;
+    leadName: string;
+    optedOutAt: string;
+  }>;
+  outboundHeatmap: Array<{
+    dow: number;
+    hour: number;
+    count: number;
   }>;
 };
 
@@ -168,49 +212,210 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function toAutonomyMode(value: unknown): LocationAutonomyMode {
+  return value === "suggest_only" ? "suggest_only" : "safe_auto";
+}
+
+function toBookingProvider(value: unknown): LocationBookingProvider {
+  if (value === "google_calendar" || value === "calendly" || value === "none") {
+    return value;
+  }
+  return "none";
+}
+
+function requireOwner(context: OrgLocationContext): void {
+  if (context.role !== "owner") {
+    throw new Error("Forbidden: owner role required");
+  }
+}
+
+async function resolveRequestScope(userId: string): Promise<{
+  clerkOrgId: string | null;
+  role: AppRole;
+}> {
+  try {
+    const authContext = await requireAuthContext();
+    if (authContext.userId !== userId) {
+      return { clerkOrgId: null, role: "owner" };
+    }
+
+    return {
+      clerkOrgId: authContext.clerkOrgId,
+      role: authContext.role,
+    };
+  } catch {
+    return { clerkOrgId: null, role: "owner" };
+  }
+}
+
 export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationContext> {
   const client = await pgPool.connect();
+  const requestScope = await resolveRequestScope(userId);
 
   try {
     await client.query("BEGIN");
 
-    const existingOrgResult = await client.query<{ id: string }>(
-      `
-        SELECT id
-        FROM orgs
-        WHERE owner_user_id = $1
-        ORDER BY created_at ASC
-        LIMIT 1
-      `,
-      [userId],
-    );
+    let orgRow:
+      | {
+          id: string;
+          name: string;
+          owner_user_id: string;
+        }
+      | undefined;
 
-    let orgId = existingOrgResult.rows[0]?.id;
-
-    if (!orgId) {
-      const defaultOrgName = "GoldBot Org";
-      const insertedOrg = await client.query<{ id: string }>(
+    if (requestScope.clerkOrgId) {
+      const orgByClerkId = await client.query<{
+        id: string;
+        name: string;
+        owner_user_id: string;
+      }>(
         `
-          INSERT INTO orgs (owner_user_id, name, slug)
-          VALUES ($1, $2, $3)
-          RETURNING id
+          SELECT id, name, owner_user_id
+          FROM orgs
+          WHERE clerk_org_id = $1
+          LIMIT 1
         `,
-        [userId, defaultOrgName, slugify(`${userId}-${defaultOrgName}`)],
+        [requestScope.clerkOrgId],
       );
-      orgId = insertedOrg.rows[0]?.id;
+
+      orgRow = orgByClerkId.rows[0];
     }
 
-    if (!orgId) {
+    if (!orgRow) {
+      const orgByMembership = await client.query<{
+        id: string;
+        name: string;
+        owner_user_id: string;
+      }>(
+        `
+          SELECT o.id, o.name, o.owner_user_id
+          FROM orgs o
+          LEFT JOIN org_memberships m
+            ON m.org_id = o.id
+            AND m.user_id = $1
+            AND m.status = 'active'
+          WHERE o.owner_user_id = $1
+            OR m.user_id = $1
+          ORDER BY
+            CASE
+              WHEN o.owner_user_id = $1 THEN 0
+              WHEN m.role = 'owner' THEN 1
+              ELSE 2
+            END,
+            o.created_at ASC
+          LIMIT 1
+        `,
+        [userId],
+      );
+
+      orgRow = orgByMembership.rows[0];
+    }
+
+    if (!orgRow) {
+      const defaultOrgName = "GoldBot Org";
+      const ownerUserIdForInsert =
+        requestScope.clerkOrgId && requestScope.role !== "owner"
+          ? `clerk-org-owner:${requestScope.clerkOrgId}`
+          : userId;
+      const insertedOrg = await client.query<{
+        id: string;
+        name: string;
+        owner_user_id: string;
+      }>(
+        `
+          INSERT INTO orgs (owner_user_id, clerk_org_id, name, slug)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id, name, owner_user_id
+        `,
+        [
+          ownerUserIdForInsert,
+          requestScope.clerkOrgId,
+          defaultOrgName,
+          slugify(`${requestScope.clerkOrgId ?? userId}-${defaultOrgName}`),
+        ],
+      );
+      orgRow = insertedOrg.rows[0];
+    }
+
+    if (!orgRow) {
       throw new Error("Unable to resolve org");
     }
+
+    const orgId = orgRow.id;
+    const ownerUserId = orgRow.owner_user_id;
+
+    if (requestScope.clerkOrgId) {
+      await client.query(
+        `
+          UPDATE orgs
+          SET
+            clerk_org_id = COALESCE(clerk_org_id, $2),
+            updated_at = now()
+          WHERE id = $1
+        `,
+        [orgId, requestScope.clerkOrgId],
+      );
+    }
+
+    await client.query(
+      `
+        INSERT INTO org_memberships (org_id, user_id, role, status)
+        VALUES ($1, $2, 'owner', 'active')
+        ON CONFLICT (org_id, user_id)
+        DO UPDATE SET
+          role = 'owner',
+          status = 'active',
+          updated_at = now()
+      `,
+      [orgId, ownerUserId],
+    );
+
+    const requestedRole: AppRole =
+      ownerUserId === userId ? "owner" : requestScope.clerkOrgId ? requestScope.role : "staff";
+
+    await client.query(
+      `
+        INSERT INTO org_memberships (org_id, user_id, role, status)
+        VALUES ($1, $2, $3, 'active')
+        ON CONFLICT (org_id, user_id)
+        DO UPDATE SET
+          role = CASE
+            WHEN org_memberships.role = 'owner' THEN 'owner'
+            ELSE EXCLUDED.role
+          END,
+          status = 'active',
+          updated_at = now()
+      `,
+      [orgId, userId, requestedRole],
+    );
+
+    const membershipResult = await client.query<{ role: AppRole; status: string }>(
+      `
+        SELECT role, status
+        FROM org_memberships
+        WHERE org_id = $1
+          AND user_id = $2
+        LIMIT 1
+      `,
+      [orgId, userId],
+    );
+
+    const membership = membershipResult.rows[0];
+    if (!membership || membership.status !== "active") {
+      throw new Error("Forbidden: not an active member of this organization");
+    }
+
+    const role: AppRole = membership.role === "owner" ? "owner" : "staff";
 
     const existingLocationResult = await client.query<{
       id: string;
       name: string;
       timezone: string;
+      autonomy_mode: string;
+      booking_provider: string;
     }>(
       `
-        SELECT id, name, timezone
+        SELECT id, name, timezone, autonomy_mode, booking_provider
         FROM locations
         WHERE org_id = $1
         ORDER BY created_at ASC
@@ -226,12 +431,17 @@ export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationC
         id: string;
         name: string;
         timezone: string;
+        autonomy_mode: string;
+        booking_provider: string;
       }>(
         `
           INSERT INTO locations (
             org_id,
             name,
             timezone,
+            autonomy_mode,
+            booking_provider,
+            booking_settings_json,
             business_hours_json,
             templates_json,
             throttle_caps_json
@@ -240,14 +450,20 @@ export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationC
             $1,
             'Main Location',
             'America/New_York',
-            $2::jsonb,
-            $3::jsonb,
-            $4::jsonb
+            $2,
+            $3,
+            $4::jsonb,
+            $5::jsonb,
+            $6::jsonb,
+            $7::jsonb
           )
-          RETURNING id, name, timezone
+          RETURNING id, name, timezone, autonomy_mode, booking_provider
         `,
         [
           orgId,
+          DEFAULT_GOLDBOT_AUTONOMY_MODE,
+          DEFAULT_GOLDBOT_BOOKING_PROVIDER,
+          JSON.stringify(DEFAULT_GOLDBOT_BOOKING_SETTINGS),
           JSON.stringify(DEFAULT_GOLDBOT_BUSINESS_HOURS),
           JSON.stringify(DEFAULT_GOLDBOT_TEMPLATES),
           JSON.stringify(DEFAULT_GOLDBOT_THROTTLE_CAPS),
@@ -282,6 +498,10 @@ export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationC
       locationId: location.id,
       locationName: location.name,
       timezone: location.timezone,
+      role,
+      clerkOrgId: requestScope.clerkOrgId,
+      autonomyMode: toAutonomyMode(location.autonomy_mode),
+      bookingProvider: toBookingProvider(location.booking_provider),
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -942,6 +1162,10 @@ export async function createInboundMessageFromWebhook(input: {
 export async function getLocationSettings(context: OrgLocationContext): Promise<{
   locationName: string;
   timezone: string;
+  role: AppRole;
+  autonomyMode: LocationAutonomyMode;
+  bookingProvider: LocationBookingProvider;
+  bookingSettingsJson: Record<string, unknown>;
   businessHoursJson: Record<string, unknown>;
   templatesJson: Record<string, unknown>;
   throttleCapsJson: Record<string, unknown>;
@@ -952,6 +1176,9 @@ export async function getLocationSettings(context: OrgLocationContext): Promise<
     pgPool.query<{
       name: string;
       timezone: string;
+      autonomy_mode: string;
+      booking_provider: string;
+      booking_settings_json: unknown;
       business_hours_json: unknown;
       templates_json: unknown;
       throttle_caps_json: unknown;
@@ -960,6 +1187,9 @@ export async function getLocationSettings(context: OrgLocationContext): Promise<
         SELECT
           name,
           timezone,
+          autonomy_mode,
+          booking_provider,
+          booking_settings_json,
           business_hours_json,
           templates_json,
           throttle_caps_json
@@ -1007,6 +1237,10 @@ export async function getLocationSettings(context: OrgLocationContext): Promise<
   return {
     locationName: location.name,
     timezone: location.timezone,
+    role: context.role,
+    autonomyMode: toAutonomyMode(location.autonomy_mode),
+    bookingProvider: toBookingProvider(location.booking_provider),
+    bookingSettingsJson: asObject(location.booking_settings_json),
     businessHoursJson: asObject(location.business_hours_json),
     templatesJson: asObject(location.templates_json),
     throttleCapsJson: asObject(location.throttle_caps_json),
@@ -1022,6 +1256,7 @@ export async function upsertKillSwitch(input: {
   reason?: string;
 }): Promise<void> {
   const context = await ensureOrgAndLocation(input.userId);
+  requireOwner(context);
   const locationId = input.scope === "location" ? context.locationId : null;
 
   await pgPool.query(
@@ -1051,20 +1286,27 @@ export async function upsertKillSwitch(input: {
 export async function updateLocationSettings(input: {
   userId: string;
   timezone: string;
+  autonomyMode: LocationAutonomyMode;
+  bookingProvider: LocationBookingProvider;
+  bookingSettingsJson: Record<string, unknown>;
   businessHoursJson: Record<string, unknown>;
   templatesJson: Record<string, unknown>;
   throttleCapsJson: Record<string, unknown>;
 }): Promise<void> {
   const context = await ensureOrgAndLocation(input.userId);
+  requireOwner(context);
 
   await pgPool.query(
     `
       UPDATE locations
       SET
         timezone = $3,
-        business_hours_json = $4::jsonb,
-        templates_json = $5::jsonb,
-        throttle_caps_json = $6::jsonb,
+        autonomy_mode = $4,
+        booking_provider = $5,
+        booking_settings_json = $6::jsonb,
+        business_hours_json = $7::jsonb,
+        templates_json = $8::jsonb,
+        throttle_caps_json = $9::jsonb,
         updated_at = now()
       WHERE org_id = $1
         AND id = $2
@@ -1073,6 +1315,9 @@ export async function updateLocationSettings(input: {
       context.orgId,
       context.locationId,
       input.timezone,
+      input.autonomyMode,
+      input.bookingProvider,
+      JSON.stringify(input.bookingSettingsJson),
       JSON.stringify(input.businessHoursJson),
       JSON.stringify(input.templatesJson),
       JSON.stringify(input.throttleCapsJson),
@@ -1208,8 +1453,69 @@ export async function listAuditEntries(context: OrgLocationContext): Promise<Aud
   }));
 }
 
+export async function listAuditEntriesForExport(
+  context: OrgLocationContext,
+  limit = 5000,
+): Promise<AuditExportRow[]> {
+  const safeLimit = Math.max(1, Math.min(10000, Math.trunc(limit)));
+  const result = await pgPool.query<{
+    id: string;
+    action_type: string;
+    policy_version: string;
+    success: boolean;
+    created_at: string;
+    decision_json: unknown;
+    result_json: unknown;
+    error_message: string | null;
+    lead_id: string | null;
+    conversation_id: string | null;
+  }>(
+    `
+      SELECT
+        a.id::text,
+        a.action_type,
+        a.policy_version,
+        a.success,
+        a.created_at,
+        a.decision_json,
+        a.result_json,
+        a.error_message,
+        a.lead_id::text AS lead_id,
+        a.conversation_id::text AS conversation_id
+      FROM audit_log a
+      WHERE a.org_id = $1
+        AND (a.location_id = $2 OR a.location_id IS NULL)
+      ORDER BY a.created_at DESC
+      LIMIT $3
+    `,
+    [context.orgId, context.locationId, safeLimit],
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    actionType: row.action_type,
+    policyVersion: row.policy_version,
+    success: row.success,
+    createdAt: row.created_at,
+    decisionJson: asObject(row.decision_json),
+    resultJson: asObject(row.result_json),
+    errorMessage: row.error_message,
+    leadId: row.lead_id,
+    conversationId: row.conversation_id,
+  }));
+}
+
 export async function getDashboardSummary(context: OrgLocationContext): Promise<DashboardSummary> {
-  const [countsResult, deadJobsResult, outboundResult, recentMessagesResult] = await Promise.all([
+  const [
+    countsResult,
+    jobCountsResult,
+    outboundResult,
+    optOutCountResult,
+    recentMessagesResult,
+    sendFailuresResult,
+    optOutEventsResult,
+    heatmapResult,
+  ] = await Promise.all([
     pgPool.query<{
       total_leads: string;
       booked_conversations: string;
@@ -1231,13 +1537,19 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
       `,
       [context.orgId, context.locationId],
     ),
-    pgPool.query<{ dead_jobs: string }>(
+    pgPool.query<{
+      queued_jobs: string;
+      running_jobs: string;
+      dead_jobs: string;
+    }>(
       `
-        SELECT COUNT(*)::text AS dead_jobs
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'queued')::text AS queued_jobs,
+          COUNT(*) FILTER (WHERE status = 'running')::text AS running_jobs,
+          COUNT(*) FILTER (WHERE status = 'dead')::text AS dead_jobs
         FROM jobs
         WHERE org_id = $1
           AND location_id = $2
-          AND status = 'dead'
       `,
       [context.orgId, context.locationId],
     ),
@@ -1249,6 +1561,17 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
           AND location_id = $2
           AND direction = 'outbound'
           AND created_at >= now() - interval '24 hours'
+      `,
+      [context.orgId, context.locationId],
+    ),
+    pgPool.query<{ opt_out_events_last_7d: string }>(
+      `
+        SELECT COUNT(*)::text AS opt_out_events_last_7d
+        FROM leads
+        WHERE org_id = $1
+          AND location_id = $2
+          AND opted_out = true
+          AND opted_out_at >= now() - interval '7 days'
       `,
       [context.orgId, context.locationId],
     ),
@@ -1277,11 +1600,75 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
       `,
       [context.orgId, context.locationId],
     ),
+    pgPool.query<{
+      id: string;
+      lead_name: string;
+      error_message: string | null;
+      created_at: string;
+    }>(
+      `
+        SELECT
+          m.id,
+          l.full_name AS lead_name,
+          m.error_message,
+          m.created_at
+        FROM messages m
+        JOIN leads l ON l.id = m.lead_id
+        WHERE m.org_id = $1
+          AND m.location_id = $2
+          AND m.direction = 'outbound'
+          AND m.status = 'failed'
+        ORDER BY m.created_at DESC
+        LIMIT 12
+      `,
+      [context.orgId, context.locationId],
+    ),
+    pgPool.query<{
+      lead_id: string;
+      lead_name: string;
+      opted_out_at: string;
+    }>(
+      `
+        SELECT
+          l.id AS lead_id,
+          l.full_name AS lead_name,
+          l.opted_out_at
+        FROM leads l
+        WHERE l.org_id = $1
+          AND l.location_id = $2
+          AND l.opted_out = true
+          AND l.opted_out_at IS NOT NULL
+        ORDER BY l.opted_out_at DESC
+        LIMIT 12
+      `,
+      [context.orgId, context.locationId],
+    ),
+    pgPool.query<{
+      dow: string;
+      hour: string;
+      count: string;
+    }>(
+      `
+        SELECT
+          EXTRACT(DOW FROM created_at)::int::text AS dow,
+          EXTRACT(HOUR FROM created_at)::int::text AS hour,
+          COUNT(*)::text AS count
+        FROM messages
+        WHERE org_id = $1
+          AND location_id = $2
+          AND direction = 'outbound'
+          AND created_at >= now() - interval '7 days'
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+      `,
+      [context.orgId, context.locationId],
+    ),
   ]);
 
   const counts = countsResult.rows[0];
-  const deadJobs = deadJobsResult.rows[0];
+  const jobs = jobCountsResult.rows[0];
   const outbound = outboundResult.rows[0];
+  const optOutCount = optOutCountResult.rows[0];
 
   return {
     totalLeads: Number(counts?.total_leads ?? "0"),
@@ -1289,8 +1676,11 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
     awaitingYes: Number(counts?.awaiting_yes ?? "0"),
     awaitingTimeChoice: Number(counts?.awaiting_time_choice ?? "0"),
     staffAttention: Number(counts?.staff_attention ?? "0"),
-    deadJobs: Number(deadJobs?.dead_jobs ?? "0"),
+    deadJobs: Number(jobs?.dead_jobs ?? "0"),
+    queuedJobs: Number(jobs?.queued_jobs ?? "0"),
+    runningJobs: Number(jobs?.running_jobs ?? "0"),
     outboundLast24h: Number(outbound?.outbound_last_24h ?? "0"),
+    optOutEventsLast7d: Number(optOutCount?.opt_out_events_last_7d ?? "0"),
     recentMessages: recentMessagesResult.rows.map((row) => ({
       id: row.id,
       leadName: row.lead_name,
@@ -1298,6 +1688,22 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
       status: row.status,
       body: row.body,
       createdAt: row.created_at,
+    })),
+    recentSendFailures: sendFailuresResult.rows.map((row) => ({
+      id: row.id,
+      leadName: row.lead_name,
+      errorMessage: row.error_message,
+      createdAt: row.created_at,
+    })),
+    recentOptOutEvents: optOutEventsResult.rows.map((row) => ({
+      leadId: row.lead_id,
+      leadName: row.lead_name,
+      optedOutAt: row.opted_out_at,
+    })),
+    outboundHeatmap: heatmapResult.rows.map((row) => ({
+      dow: Number(row.dow),
+      hour: Number(row.hour),
+      count: Number(row.count),
     })),
   };
 }

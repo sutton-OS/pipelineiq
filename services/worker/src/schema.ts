@@ -16,6 +16,10 @@ export const DEFAULT_THROTTLE_CAPS = {
   invalid_response_limit: 3,
 } as const;
 
+export const DEFAULT_AUTONOMY_MODE = "safe_auto" as const;
+export const DEFAULT_BOOKING_PROVIDER = "none" as const;
+export const DEFAULT_BOOKING_SETTINGS = {} as const;
+
 export const DEFAULT_TEMPLATES = {
   intro:
     "Hi {{first_name}}, thanks for reaching out. Reply YES if you'd like to book your free trial.",
@@ -52,11 +56,28 @@ CREATE TABLE IF NOT EXISTS orgs (
 CREATE INDEX IF NOT EXISTS orgs_owner_user_idx ON orgs (owner_user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS orgs_owner_name_uidx ON orgs (owner_user_id, lower(name));
 
+CREATE TABLE IF NOT EXISTS org_memberships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner', 'staff')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'invited', 'suspended')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (org_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS org_memberships_user_idx ON org_memberships (user_id);
+CREATE INDEX IF NOT EXISTS org_memberships_org_role_idx ON org_memberships (org_id, role, status);
+
 CREATE TABLE IF NOT EXISTS locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   timezone TEXT NOT NULL,
+  autonomy_mode TEXT NOT NULL DEFAULT 'safe_auto' CHECK (autonomy_mode IN ('suggest_only', 'safe_auto')),
+  booking_provider TEXT NOT NULL DEFAULT 'none' CHECK (booking_provider IN ('none', 'google_calendar', 'calendly')),
+  booking_settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   business_hours_json JSONB NOT NULL DEFAULT '${defaultBusinessHoursSql}'::jsonb,
   templates_json JSONB NOT NULL DEFAULT '${defaultTemplatesSql}'::jsonb,
   throttle_caps_json JSONB NOT NULL DEFAULT '${defaultThrottleCapsSql}'::jsonb,
@@ -66,6 +87,9 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 
 CREATE INDEX IF NOT EXISTS locations_org_idx ON locations (org_id);
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS autonomy_mode TEXT NOT NULL DEFAULT 'safe_auto';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS booking_provider TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS booking_settings_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -147,8 +171,11 @@ CREATE TABLE IF NOT EXISTS appointments (
   ends_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL DEFAULT 'booked' CHECK (status IN ('proposed', 'booked', 'canceled')),
   idempotency_key TEXT,
+  provider TEXT,
+  provider_appointment_id TEXT,
   notes TEXT,
   metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  provider_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (org_id, id)
 );
@@ -158,6 +185,12 @@ CREATE INDEX IF NOT EXISTS appointments_lead_created_idx ON appointments (lead_i
 CREATE UNIQUE INDEX IF NOT EXISTS appointments_org_idempotency_uidx
   ON appointments (org_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS appointments_provider_id_uidx
+  ON appointments (org_id, provider, provider_appointment_id)
+  WHERE provider_appointment_id IS NOT NULL;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS provider TEXT;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS provider_appointment_id TEXT;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS provider_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS jobs (
   id BIGSERIAL PRIMARY KEY,

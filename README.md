@@ -1,79 +1,192 @@
-# PipelineIQ
+# PipelineIQ GoldBot SaaS
 
-## One CSV → stunning PDF reports your team will actually read
+PipelineIQ is the GoldBot multi-tenant SaaS app for lead intake, governed SMS automation, booking, and operations visibility.
 
-PipelineIQ turns messy sales exports into clean, executive-ready reporting in minutes.
-Upload a CSV, preview your report instantly, and export a polished PDF with zero dashboard setup pain.
+This repository is the **source of truth** for the SaaS implementation (Next.js web app + worker service).
+Legacy Tauri/Rust GoldBot code is not part of this tree.
 
-## Why teams choose PipelineIQ
+## Architecture
 
-- Instant CSV ingestion with drag-and-drop UX
-- Smart parsing for rep name, revenue, quota, and status
-- Live report preview before export
-- Beautiful paper-and-ink PDF output for leadership updates
-- Fast auth and account flows with Clerk
-- Billing hooks and monetization-ready wiring with Stripe
+- `app/`: Next.js App Router dashboard, server actions, API routes
+- `services/worker/`: durable job runner, state machine, governor, action gateway, provider adapters
+- `supabase/migrations/`: Postgres schema and migration history
+- `lib/goldbot.ts`: org-scoped data access + dashboard queries for the SaaS workflow
 
-## Product Screenshots
+Core flow:
 
-![PipelineIQ Dashboard Preview Placeholder](https://placehold.co/1440x900/f9f5eb/1a1a1a?text=PipelineIQ+Dashboard+Preview)
-*Dashboard-style preview card and leaderboard layout*
+1. Lead intake or inbound webhook writes domain rows.
+2. Durable job is enqueued in `jobs`.
+3. Worker evaluates state machine actions.
+4. Governor validates each action (kill switch, consent, business hours, throttles, autonomy mode).
+5. Action gateway performs writes/external calls and records `audit_log` rows.
 
-![PipelineIQ CSV Uploader Placeholder](https://placehold.co/1440x900/ffffff/1a1a1a?text=PipelineIQ+CSV+Uploader)
-*CSV upload zone, live table preview, and PDF generation CTA*
+## Prerequisites
 
-![PipelineIQ PDF Output Placeholder](https://placehold.co/1440x900/f3eee3/1a1a1a?text=PipelineIQ+PDF+Output)
-*Final exported PDF in the same visual style as the app*
+- Node.js 20+
+- npm 10+
+- Postgres (Supabase or compatible)
+- Clerk account
+- Stripe account
+- Twilio account (for real SMS)
 
-## Tech Stack
+## Environment Setup
 
-- Next.js 16 (App Router) + React 19 + TypeScript
-- Tailwind CSS 4 + custom paper/ink design tokens
-- shadcn/ui primitives and Sonner toasts
-- PapaParse for CSV parsing
-- jsPDF for PDF generation
-- Clerk for authentication
-- Stripe for billing and checkout/webhook flows
+Copy and fill env files:
 
-## Quickstart
+```bash
+cp .env.web.example .env.local
+cp .env.worker.example services/worker/.env.local  # optional, worker also reads repo .env.local
+```
 
-1. Install dependencies:
+Minimum required values:
+
+### Web (`.env.local`)
+
+- `NEXT_PUBLIC_APP_URL`
+- `DATABASE_URL`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_PRO_PRICE_ID`
+- `STRIPE_WEBHOOK_SECRET`
+
+Optional:
+
+- `DEV_USER_ID` (local fallback when Clerk is not configured)
+- `TWILIO_VERIFY_SIGNATURE`
+- `TWILIO_WEBHOOK_URL`
+
+### Worker (`.env.local` or worker env)
+
+- `DATABASE_URL` (or `WORKER_DATABASE_URL`)
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` (for real SMS)
+
+Booking provider vars (Google Calendar adapter):
+
+- `BOOKING_PROVIDER=google_calendar` (or `none`)
+- `GOOGLE_CALENDAR_ID`
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
+- `GOOGLE_CALENDAR_IMPERSONATED_USER` (optional)
+
+## Database Setup
+
+Run Supabase migrations (recommended) so web and worker schema match:
+
+- `supabase/migrations/202602230001_goldbot_v1.sql`
+- `supabase/migrations/202602230002_goldbot_prod_readiness.sql`
+
+Then seed local demo data:
+
+```bash
+npm --prefix services/worker run seed
+```
+
+Seed creates:
+
+- demo org + main location
+- owner membership
+- demo lead + conversation
+- starter `lead_created` job
+
+## Run Services
+
+Install dependencies:
 
 ```bash
 npm install
+npm --prefix services/worker install
 ```
 
-2. Create local environment config:
-
-```bash
-cp .env.example .env.local
-```
-
-3. Fill in required env vars in `.env.local`:
-
-- `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-
-4. Run locally:
+Run web app:
 
 ```bash
 npm run dev
 ```
 
-5. Production build check:
+Run worker:
 
 ```bash
-npm run build
+npm run worker:dev
 ```
 
-## Deploy
+Run both:
 
-Deploy PipelineIQ to Vercel:
+```bash
+npm run dev:all
+```
 
-- [Deploy to Vercel](https://vercel.com/new/clone?repository-url=https://github.com/your-org/pipelineiq)
+## Clerk Configuration
 
-Update the repository URL above to your fork/org before sharing.
+1. Create a Clerk app.
+2. Configure env keys in `.env.local`.
+3. Enable Organizations in Clerk.
+4. Use an active organization in the UI; app access is scoped to org membership (`owner` vs `staff`).
+5. Owner-only controls: kill switch + automation/autonomy settings.
+
+## Supabase Configuration
+
+1. Create a Supabase project.
+2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+3. Set `DATABASE_URL` to your Postgres connection string.
+4. Apply migrations before running worker/web.
+
+## Stripe Configuration
+
+1. Create a recurring price in Stripe.
+2. Set `STRIPE_PRO_PRICE_ID` to that price.
+3. Set `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+4. Add webhook endpoint for `/api/webhook/stripe` and set `STRIPE_WEBHOOK_SECRET`.
+
+## Twilio Configuration
+
+- Webhook endpoint: `/api/webhook/twilio`
+- In production, keep `TWILIO_VERIFY_SIGNATURE=true`.
+- Set `TWILIO_WEBHOOK_URL` to the publicly reachable URL used by Twilio for signature validation.
+
+## Booking Provider Integration
+
+The worker supports booking via provider adapter:
+
+- `none`: simulated provider response (safe local default)
+- `google_calendar`: real event insert with deterministic idempotent event IDs
+
+Location-level settings in `/dashboard/settings/automation` control:
+
+- `autonomy_mode`: `suggest_only` or `safe_auto`
+- `booking_provider`
+- `booking_settings_json`
+
+## Tests and Validation
+
+Run checks:
+
+```bash
+npm run lint
+npm run typecheck
+npm run worker:typecheck
+npm run worker:test
+```
+
+Notes:
+
+- Some worker integration tests skip automatically when Postgres env is unavailable.
+- Unit coverage includes governor edge cases, action-gateway idempotency, and retry/dead-letter behavior.
+
+## Operational Dashboard + Export
+
+Dashboard includes:
+
+- queued/running/dead job counts
+- recent send failures
+- recent opt-out events
+- outbound heatmap (last 7 days)
+
+Audit export:
+
+- `GET /api/audit/export?limit=5000` (CSV)
+- includes policy version, decisions/results, and timestamps

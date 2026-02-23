@@ -51,6 +51,7 @@ export default async function AutomationSettingsPage({
   const userId = await requireUserId();
   const context = await ensureOrgAndLocation(userId);
   const settings = await getLocationSettings(context);
+  const canManageAutomation = settings.role === "owner";
 
   const params = (await searchParams) ?? {};
   const error = typeof params.error === "string" ? params.error : null;
@@ -83,21 +84,27 @@ export default async function AutomationSettingsPage({
             <CardTitle>Global Kill Switch</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={submitKillSwitch} className="space-y-3">
-              <input type="hidden" name="scope" value="org" />
-              <input type="hidden" name="reason" value="set from dashboard" />
-              <input
-                type="hidden"
-                name="enabled"
-                value={settings.globalKillEnabled ? "false" : "true"}
-              />
+            {canManageAutomation ? (
+              <form action={submitKillSwitch} className="space-y-3">
+                <input type="hidden" name="scope" value="org" />
+                <input type="hidden" name="reason" value="set from dashboard" />
+                <input
+                  type="hidden"
+                  name="enabled"
+                  value={settings.globalKillEnabled ? "false" : "true"}
+                />
+                <p className="text-sm text-ink-2">
+                  Current: <strong>{settings.globalKillEnabled ? "Enabled" : "Disabled"}</strong>
+                </p>
+                <Button type="submit" variant={settings.globalKillEnabled ? "outline" : "destructive"}>
+                  {settings.globalKillEnabled ? "Disable Global Kill" : "Enable Global Kill"}
+                </Button>
+              </form>
+            ) : (
               <p className="text-sm text-ink-2">
                 Current: <strong>{settings.globalKillEnabled ? "Enabled" : "Disabled"}</strong>
               </p>
-              <Button type="submit" variant={settings.globalKillEnabled ? "outline" : "destructive"}>
-                {settings.globalKillEnabled ? "Disable Global Kill" : "Enable Global Kill"}
-              </Button>
-            </form>
+            )}
           </CardContent>
         </Card>
 
@@ -106,24 +113,30 @@ export default async function AutomationSettingsPage({
             <CardTitle>Location Kill Switch</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={submitKillSwitch} className="space-y-3">
-              <input type="hidden" name="scope" value="location" />
-              <input type="hidden" name="reason" value="set from dashboard" />
-              <input
-                type="hidden"
-                name="enabled"
-                value={settings.locationKillEnabled ? "false" : "true"}
-              />
+            {canManageAutomation ? (
+              <form action={submitKillSwitch} className="space-y-3">
+                <input type="hidden" name="scope" value="location" />
+                <input type="hidden" name="reason" value="set from dashboard" />
+                <input
+                  type="hidden"
+                  name="enabled"
+                  value={settings.locationKillEnabled ? "false" : "true"}
+                />
+                <p className="text-sm text-ink-2">
+                  Current: <strong>{settings.locationKillEnabled ? "Enabled" : "Disabled"}</strong>
+                </p>
+                <Button
+                  type="submit"
+                  variant={settings.locationKillEnabled ? "outline" : "destructive"}
+                >
+                  {settings.locationKillEnabled ? "Disable Location Kill" : "Enable Location Kill"}
+                </Button>
+              </form>
+            ) : (
               <p className="text-sm text-ink-2">
                 Current: <strong>{settings.locationKillEnabled ? "Enabled" : "Disabled"}</strong>
               </p>
-              <Button
-                type="submit"
-                variant={settings.locationKillEnabled ? "outline" : "destructive"}
-              >
-                {settings.locationKillEnabled ? "Disable Location Kill" : "Enable Location Kill"}
-              </Button>
-            </form>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -133,6 +146,12 @@ export default async function AutomationSettingsPage({
           <CardTitle>Location Automation Config</CardTitle>
         </CardHeader>
         <CardContent>
+          {!canManageAutomation ? (
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Staff members have read-only access. Owner role is required to change automation controls.
+            </p>
+          ) : null}
+
           <form action={submitAutomationSettings} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>
@@ -141,6 +160,47 @@ export default async function AutomationSettingsPage({
                 name="timezone"
                 defaultValue={settings.timezone || "America/New_York"}
                 required
+                disabled={!canManageAutomation}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="autonomyMode">Autonomy Mode</Label>
+              <select
+                id="autonomyMode"
+                name="autonomyMode"
+                defaultValue={settings.autonomyMode}
+                disabled={!canManageAutomation}
+                className="border-input bg-background focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+              >
+                <option value="suggest_only">suggest_only (staff approval required)</option>
+                <option value="safe_auto">safe_auto (governed auto actions)</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bookingProvider">Booking Provider</Label>
+              <select
+                id="bookingProvider"
+                name="bookingProvider"
+                defaultValue={settings.bookingProvider}
+                disabled={!canManageAutomation}
+                className="border-input bg-background focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+              >
+                <option value="none">none (simulation fallback)</option>
+                <option value="google_calendar">google_calendar</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bookingSettingsJson">Booking Settings JSON</Label>
+              <textarea
+                id="bookingSettingsJson"
+                name="bookingSettingsJson"
+                rows={6}
+                disabled={!canManageAutomation}
+                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                defaultValue={JSON.stringify(settings.bookingSettingsJson || {}, null, 2)}
               />
             </div>
 
@@ -150,6 +210,7 @@ export default async function AutomationSettingsPage({
                 id="businessHoursJson"
                 name="businessHoursJson"
                 rows={8}
+                disabled={!canManageAutomation}
                 className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
                 defaultValue={JSON.stringify(
                   settings.businessHoursJson || DEFAULT_GOLDBOT_BUSINESS_HOURS,
@@ -165,6 +226,7 @@ export default async function AutomationSettingsPage({
                 id="templatesJson"
                 name="templatesJson"
                 rows={10}
+                disabled={!canManageAutomation}
                 className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
                 defaultValue={JSON.stringify(
                   settings.templatesJson || DEFAULT_GOLDBOT_TEMPLATES,
@@ -180,6 +242,7 @@ export default async function AutomationSettingsPage({
                 id="throttleCapsJson"
                 name="throttleCapsJson"
                 rows={5}
+                disabled={!canManageAutomation}
                 className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
                 defaultValue={JSON.stringify(
                   settings.throttleCapsJson || DEFAULT_GOLDBOT_THROTTLE_CAPS,
@@ -189,7 +252,9 @@ export default async function AutomationSettingsPage({
               />
             </div>
 
-            <Button type="submit">Save Automation Settings</Button>
+            <Button type="submit" disabled={!canManageAutomation}>
+              Save Automation Settings
+            </Button>
           </form>
         </CardContent>
       </Card>

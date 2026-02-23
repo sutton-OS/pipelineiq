@@ -62,6 +62,10 @@ function evaluateSendMessage(
 ): string[] {
   const reasons: string[] = [];
 
+  if (context.locationConfig.autonomyMode === "suggest_only") {
+    reasons.push("autonomy_mode_suggest_only");
+  }
+
   if (isKillSwitchEnabled(context)) {
     reasons.push("kill_switch_enabled");
   }
@@ -105,6 +109,10 @@ function evaluateBookAppointment(
   now: Date,
 ): string[] {
   const reasons: string[] = [];
+
+  if (context.locationConfig.autonomyMode === "suggest_only") {
+    reasons.push("autonomy_mode_suggest_only");
+  }
 
   if (isKillSwitchEnabled(context)) {
     reasons.push("kill_switch_enabled");
@@ -151,14 +159,25 @@ function evaluateAction(
     case "book_appointment":
       return evaluateBookAppointment(context, normalizedAction, now);
     case "schedule_job": {
+      if (context.locationConfig.autonomyMode === "suggest_only") {
+        return ["autonomy_mode_suggest_only"];
+      }
       const runAt = new Date(normalizedAction.runAt);
       if (Number.isNaN(runAt.getTime())) {
         return ["invalid_run_at"];
       }
       return [];
     }
+    case "conversation_patch": {
+      if (
+        context.locationConfig.autonomyMode === "suggest_only" &&
+        normalizedAction.state === "booked"
+      ) {
+        return ["autonomy_mode_suggest_only"];
+      }
+      return [];
+    }
     case "set_opt_out":
-    case "conversation_patch":
       return [];
     default:
       return ["unknown_action"];

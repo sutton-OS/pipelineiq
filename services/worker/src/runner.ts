@@ -9,6 +9,8 @@ import { sendSmsViaTwilio } from "./providers/twilio";
 import { pool } from "./db";
 import { evaluateStateMachine } from "./stateMachine";
 import {
+  DEFAULT_AUTONOMY_MODE,
+  DEFAULT_BOOKING_PROVIDER,
   DEFAULT_THROTTLE_CAPS,
   DEFAULT_TEMPLATES,
 } from "./schema";
@@ -52,6 +54,9 @@ type ContextRow = {
   conversation_last_outbound_at: string | null;
   flags_json: unknown;
   timezone: string;
+  autonomy_mode: string | null;
+  booking_provider: string | null;
+  booking_settings_json: unknown;
   business_hours_json: unknown;
   throttle_caps_json: unknown;
   templates_json: unknown;
@@ -296,6 +301,20 @@ function parseTemplates(value: unknown): {
   };
 }
 
+function parseAutonomyMode(value: unknown): "suggest_only" | "safe_auto" {
+  if (value === "suggest_only" || value === "safe_auto") {
+    return value;
+  }
+  return DEFAULT_AUTONOMY_MODE;
+}
+
+function parseBookingProvider(value: unknown): "none" | "google_calendar" | "calendly" {
+  if (value === "google_calendar" || value === "calendly" || value === "none") {
+    return value;
+  }
+  return DEFAULT_BOOKING_PROVIDER;
+}
+
 function mapContextRow(row: ContextRow): ConversationContext {
   const businessHours: BusinessHours = coerceBusinessHours(row.business_hours_json);
 
@@ -319,6 +338,9 @@ function mapContextRow(row: ContextRow): ConversationContext {
     lastOutboundAt: row.conversation_last_outbound_at,
     locationConfig: {
       timezone: row.timezone,
+      autonomyMode: parseAutonomyMode(row.autonomy_mode),
+      bookingProvider: parseBookingProvider(row.booking_provider),
+      bookingSettings: asRecord(row.booking_settings_json),
       businessHours,
       throttleCaps: parseThrottleCaps(row.throttle_caps_json),
       templates: parseTemplates(row.templates_json),
@@ -352,6 +374,9 @@ async function loadConversationContext(conversationId: string): Promise<Conversa
         c.last_outbound_at AS conversation_last_outbound_at,
         c.flags_json,
         loc.timezone,
+        loc.autonomy_mode,
+        loc.booking_provider,
+        loc.booking_settings_json,
         loc.business_hours_json,
         loc.throttle_caps_json,
         loc.templates_json,
@@ -652,3 +677,12 @@ export async function runLoop(): Promise<never> {
     await sleep(POLL_INTERVAL_MS);
   }
 }
+
+export const __testables = {
+  claimDueJobs,
+  handleClaimedJob,
+  markFailure,
+  markDone,
+  parseJobPayload,
+  processJob,
+};

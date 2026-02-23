@@ -28,6 +28,9 @@ function buildContext(overrides: Partial<ConversationContext> = {}): Conversatio
     locationKillSwitch: false,
     locationConfig: {
       timezone: "America/New_York",
+      autonomyMode: "safe_auto",
+      bookingProvider: "none",
+      bookingSettings: {},
       businessHours: {
         mon: [{ start: "09:00", end: "17:00" }],
         tue: [{ start: "09:00", end: "17:00" }],

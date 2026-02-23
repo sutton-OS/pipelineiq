@@ -1,5 +1,8 @@
 import type { BusinessHours } from "./businessHours";
 
+export type AutonomyMode = "suggest_only" | "safe_auto";
+export type BookingProvider = "none" | "google_calendar" | "calendly";
+
 export const JOB_TYPES = [
   "lead_created",
   "inbound_received",
@@ -74,6 +77,9 @@ export type TriggerEvent =
 
 export type LocationConfig = {
   timezone: string;
+  autonomyMode: AutonomyMode;
+  bookingProvider: BookingProvider;
+  bookingSettings: Record<string, unknown>;
   businessHours: BusinessHours;
   throttleCaps: {
     perHour: number;

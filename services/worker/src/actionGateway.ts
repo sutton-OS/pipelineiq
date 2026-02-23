@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "./db";
+import { bookAppointmentViaProvider } from "./providers/booking";
 import { createActionKey } from "./templates";
 import type {
   ActionGatewayInput,
@@ -245,7 +246,66 @@ async function applyBookAppointment(
   context: ConversationContext,
   action: Extract<ProposedAction, { kind: "book_appointment" }>,
 ): Promise<MutationResult> {
-  const appointmentResult = await client.query<{ id: string; starts_at: string }>(
+  const existingAppointmentResult = await client.query<{
+    id: string;
+    starts_at: string;
+    provider: string | null;
+    provider_appointment_id: string | null;
+    provider_payload_json: unknown;
+  }>(
+    `
+      SELECT
+        id,
+        starts_at,
+        provider,
+        provider_appointment_id,
+        provider_payload_json
+      FROM appointments
+      WHERE org_id = $1
+        AND idempotency_key = $2
+      LIMIT 1
+    `,
+    [context.orgId, action.idempotencyKey],
+  );
+
+  const existingAppointment = existingAppointmentResult.rows[0];
+  const providerResult =
+    existingAppointment?.provider_appointment_id && existingAppointment.provider
+      ? {
+          provider: existingAppointment.provider,
+          providerAppointmentId: existingAppointment.provider_appointment_id,
+          status: "existing",
+          simulated: false,
+          providerPayload:
+            existingAppointment.provider_payload_json &&
+            typeof existingAppointment.provider_payload_json === "object" &&
+            !Array.isArray(existingAppointment.provider_payload_json)
+              ? (existingAppointment.provider_payload_json as Record<string, unknown>)
+              : {},
+        }
+      : await bookAppointmentViaProvider({
+          provider: context.locationConfig.bookingProvider,
+          bookingSettings: context.locationConfig.bookingSettings,
+          orgId: context.orgId,
+          locationId: context.locationId,
+          conversationId: context.conversationId,
+          leadId: context.leadId,
+          leadName: context.leadFullName,
+          leadPhone: context.leadPhone,
+          timezone: context.locationConfig.timezone,
+          startsAt: action.startsAt,
+          endsAt: action.endsAt,
+          notes: action.notes,
+          metadata: action.metadata,
+          idempotencyKey: action.idempotencyKey,
+        });
+
+  const appointmentResult = await client.query<{
+    id: string;
+    starts_at: string;
+    provider: string | null;
+    provider_appointment_id: string | null;
+  }>(
     `
       INSERT INTO appointments (
         org_id,
@@ -256,14 +316,41 @@ async function applyBookAppointment(
         ends_at,
         status,
         idempotency_key,
+        provider,
+        provider_appointment_id,
         notes,
-        metadata_json
+        metadata_json,
+        provider_payload_json
       )
-      VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, 'booked', $7, $8, $9::jsonb)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5::timestamptz,
+        $6::timestamptz,
+        'booked',
+        $7,
+        $8,
+        $9,
+        $10,
+        $11::jsonb,
+        $12::jsonb
+      )
       ON CONFLICT (org_id, idempotency_key)
       DO UPDATE SET
-        notes = COALESCE(EXCLUDED.notes, appointments.notes)
-      RETURNING id, starts_at
+        notes = COALESCE(EXCLUDED.notes, appointments.notes),
+        provider = COALESCE(appointments.provider, EXCLUDED.provider),
+        provider_appointment_id = COALESCE(
+          appointments.provider_appointment_id,
+          EXCLUDED.provider_appointment_id
+        ),
+        provider_payload_json = CASE
+          WHEN appointments.provider_payload_json = '{}'::jsonb
+            THEN EXCLUDED.provider_payload_json
+          ELSE appointments.provider_payload_json
+        END
+      RETURNING id, starts_at, provider, provider_appointment_id
     `,
     [
       context.orgId,
@@ -273,8 +360,11 @@ async function applyBookAppointment(
       action.startsAt,
       action.endsAt,
       action.idempotencyKey,
+      providerResult.provider,
+      providerResult.providerAppointmentId,
       action.notes ?? null,
       JSON.stringify(action.metadata ?? {}),
+      JSON.stringify(providerResult.providerPayload ?? {}),
     ],
   );
 
@@ -306,6 +396,11 @@ async function applyBookAppointment(
     details: {
       appointmentId,
       startsAt: appointmentRow?.starts_at ?? null,
+      provider: appointmentRow?.provider ?? providerResult.provider,
+      providerAppointmentId:
+        appointmentRow?.provider_appointment_id ?? providerResult.providerAppointmentId,
+      providerStatus: providerResult.status,
+      providerSimulated: providerResult.simulated,
     },
   };
 }

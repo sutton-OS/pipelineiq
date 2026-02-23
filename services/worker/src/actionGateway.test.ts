@@ -131,6 +131,9 @@ test("action gateway enforces idempotent outbound writes", async (t) => {
       locationKillSwitch: false,
       locationConfig: {
         timezone: "America/New_York",
+        autonomyMode: "safe_auto",
+        bookingProvider: "none",
+        bookingSettings: {},
         businessHours: JSON.parse(JSON.stringify(DEFAULT_BUSINESS_HOURS)) as ConversationContext["locationConfig"]["businessHours"],
         throttleCaps: {
           perHour: 2,
