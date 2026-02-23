@@ -31,16 +31,30 @@ Core flow:
 
 ## Environment Setup
 
-Copy and fill env files:
+Create local env files:
 
 ```bash
-cp .env.web.example .env.local
-cp .env.worker.example services/worker/.env.local  # optional, worker also reads repo .env.local
+cp apps/web/.env.example apps/web/.env.local
+cp .env.worker.example apps/worker/.env.local
 ```
 
-Minimum required values:
+For local development that mirrors Production values, pull env from Vercel:
 
-### Web (`.env.local`)
+```bash
+npm run env:pull
+```
+
+Validate env before starting/building:
+
+```bash
+npm run env:check
+```
+
+`apps/web/.env.local` is gitignored.
+
+Required web keys (`apps/web/.env.example`):
+
+### Web (`apps/web/.env.local`)
 
 - `NEXT_PUBLIC_APP_URL`
 - `DATABASE_URL`
@@ -106,6 +120,12 @@ Run web app:
 
 ```bash
 npm run dev
+```
+
+Build (includes env validation via `npm run env:check`):
+
+```bash
+npm run build
 ```
 
 Run worker:

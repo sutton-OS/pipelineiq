@@ -1,23 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
+import { getMissingEnvKeysFromError } from "@/lib/env-error";
 
 type ReportsErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
 };
 
-function getMissingKeys(message: string): string[] {
-  const envMatch = message.match(/\[env_missing\]\s+scope=[^\s]+\s+missing=(.+)$/);
-  if (!envMatch) return [];
-  return envMatch[1]
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 export default function ReportsError({ error, reset }: ReportsErrorProps) {
-  const missingKeys = getMissingKeys(error.message ?? "");
+  const missingKeys = getMissingEnvKeysFromError(error.message ?? "");
 
   useEffect(() => {
     const referenceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -40,8 +32,14 @@ export default function ReportsError({ error, reset }: ReportsErrorProps) {
 
         {missingKeys.length > 0 ? (
           <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Missing environment keys: <strong>{missingKeys.join(", ")}</strong>. Add these in
-            Vercel and redeploy.
+            <p>
+              Missing environment keys: <strong>{missingKeys.join(", ")}</strong>.
+            </p>
+            <p className="mt-1">
+              Local fix: run <code>npm run env:pull</code> and <code>npm run env:check</code>.
+              Vercel fix: add these in Project Settings -&gt; Environment Variables (Production),
+              then redeploy.
+            </p>
           </div>
         ) : null}
         <button

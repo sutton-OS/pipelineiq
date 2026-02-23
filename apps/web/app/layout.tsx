@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { DM_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
 import { Toaster } from "sonner";
+import { requireStartupEnv } from "@/lib/env";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -21,6 +22,8 @@ const instrumentSerif = Instrument_Serif({
   variable: "--font-serif",
   weight: "400",
 });
+
+requireStartupEnv();
 
 export const metadata: Metadata = {
   metadataBase: new URL(

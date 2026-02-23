@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev apps/web",
-    "build": "next build apps/web --webpack",
+    "build": "npm run env:check && next build apps/web --webpack",
     "start": "next start apps/web",
+    "env:check": "node apps/web/scripts/env-check.mjs",
+    "env:pull": "npx vercel env pull apps/web/.env.local --environment=production --yes",
     "lint": "eslint --config apps/web/eslint.config.mjs apps/web",
     "worker:dev": "npm --prefix apps/worker run dev",
     "worker:build": "npm --prefix apps/worker run build",
@@ -39,7 +41,8 @@
     "react-dom": "19.2.3",
     "sonner": "^2.0.7",
     "stripe": "^20.3.1",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

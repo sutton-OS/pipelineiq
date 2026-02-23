@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { getMissingEnvKeysFromError } from "@/lib/env-error";
 
 type RootErrorProps = {
   error: Error & { digest?: string };
@@ -8,11 +9,7 @@ type RootErrorProps = {
 };
 
 export default function RootError({ error, reset }: RootErrorProps) {
-  const envMatch = error.message.match(/\[env_missing\]\s+scope=[^\s]+\s+missing=(.+)$/);
-  const missingKeys = envMatch?.[1]
-    ?.split(",")
-    .map((key) => key.trim())
-    .filter(Boolean);
+  const missingKeys = getMissingEnvKeysFromError(error.message ?? "");
 
   useEffect(() => {
     const referenceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -32,10 +29,17 @@ export default function RootError({ error, reset }: RootErrorProps) {
         <p className="mt-3 text-sm leading-relaxed text-[#4a4a4a]">
           We hit an unexpected error while rendering this view. Retry to reload the page.
         </p>
-        {missingKeys && missingKeys.length > 0 ? (
-          <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Missing environment keys: <strong>{missingKeys.join(", ")}</strong>.
-          </p>
+        {missingKeys.length > 0 ? (
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p>
+              Missing environment keys: <strong>{missingKeys.join(", ")}</strong>.
+            </p>
+            <p className="mt-1">
+              Local fix: run <code>npm run env:pull</code> and <code>npm run env:check</code>.
+              Vercel fix: add these in Project Settings -&gt; Environment Variables (Production),
+              then redeploy.
+            </p>
+          </div>
         ) : null}
         <button
           type="button"
