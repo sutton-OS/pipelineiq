@@ -1,10 +1,8 @@
 import { Pool } from "pg";
+import { requireEnv } from "@/lib/env";
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required");
-}
+requireEnv(["DATABASE_URL"], "pg");
+const connectionString = process.env.DATABASE_URL!;
 
 const globalForPg = globalThis as typeof globalThis & {
   __pipelineiqPgPool?: Pool;

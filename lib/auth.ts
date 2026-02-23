@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { requireEnv } from "@/lib/env";
 
 export type AppRole = "owner" | "staff";
 
@@ -29,6 +30,11 @@ export function isOwnerRole(role: string | null | undefined): boolean {
 }
 
 export async function requireAuthContext(): Promise<AuthContext> {
+  requireEnv(
+    ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"],
+    "auth.clerk",
+  );
+
   const authResult = await auth();
 
   if (authResult.userId) {

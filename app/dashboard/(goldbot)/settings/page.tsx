@@ -165,6 +165,24 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-serif">Environment</h2>
+
+        <Card className="border-border bg-white/70">
+          <CardContent className="flex items-center justify-between gap-3 pt-6">
+            <div>
+              <p className="font-medium text-ink">Environment Status</p>
+              <p className="text-sm text-ink-2">
+                View required key presence for dashboard services.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/settings/env">Open Environment Status</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

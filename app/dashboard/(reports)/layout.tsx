@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { REPORTS_DASHBOARD_ENV_KEYS, requireEnv } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: {
@@ -7,10 +8,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ReportsLayout({
+export default async function ReportsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  requireEnv([...REPORTS_DASHBOARD_ENV_KEYS], "dashboard.reports");
   return children;
 }

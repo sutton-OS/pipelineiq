@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GOLDBOT_DASHBOARD_ENV_KEYS, requireEnv } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: {
@@ -7,10 +8,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function GoldBotLayout({
+export default async function GoldBotLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  requireEnv([...GOLDBOT_DASHBOARD_ENV_KEYS], "dashboard.goldbot");
   return children;
 }
