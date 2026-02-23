@@ -1,42 +1,6 @@
-import { query } from "./db";
+-- GoldBot v1 schema for PipelineIQ SaaS migration
+-- Mirrors services/worker/src/schema.ts
 
-export const DEFAULT_BUSINESS_HOURS = {
-  mon: [{ start: "09:00", end: "17:00" }],
-  tue: [{ start: "09:00", end: "17:00" }],
-  wed: [{ start: "09:00", end: "17:00" }],
-  thu: [{ start: "09:00", end: "17:00" }],
-  fri: [{ start: "09:00", end: "17:00" }],
-  sat: [],
-  sun: [],
-} as const;
-
-export const DEFAULT_THROTTLE_CAPS = {
-  per_hour: 2,
-  per_day: 6,
-  invalid_response_limit: 3,
-} as const;
-
-export const DEFAULT_TEMPLATES = {
-  intro:
-    "Hi {{first_name}}, thanks for reaching out. Reply YES if you'd like to book your free trial.",
-  follow_up:
-    "Checking in on your trial request. Reply YES and I can help book a time.",
-  slot_prompt:
-    "Great. Reply with 1, 2, or 3 to pick a time: {{slot_1}}, {{slot_2}}, {{slot_3}}.",
-  booked_confirmation:
-    "Booked. We have you down for {{slot}}. Reply STOP to opt out.",
-  reminder: "Reminder: your appointment is at {{slot}}. Reply if you need help.",
-  invalid:
-    "Sorry, I didn't catch that. Reply YES to continue or STOP to opt out.",
-  invalid_slot:
-    "Please reply with 1, 2, or 3 to pick a time. Reply STOP to opt out.",
-} as const;
-
-const defaultBusinessHoursSql = JSON.stringify(DEFAULT_BUSINESS_HOURS).replaceAll("'", "''");
-const defaultThrottleCapsSql = JSON.stringify(DEFAULT_THROTTLE_CAPS).replaceAll("'", "''");
-const defaultTemplatesSql = JSON.stringify(DEFAULT_TEMPLATES).replaceAll("'", "''");
-
-export const SCHEMA_SQL = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS orgs (
@@ -57,9 +21,9 @@ CREATE TABLE IF NOT EXISTS locations (
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   timezone TEXT NOT NULL,
-  business_hours_json JSONB NOT NULL DEFAULT '${defaultBusinessHoursSql}'::jsonb,
-  templates_json JSONB NOT NULL DEFAULT '${defaultTemplatesSql}'::jsonb,
-  throttle_caps_json JSONB NOT NULL DEFAULT '${defaultThrottleCapsSql}'::jsonb,
+  business_hours_json JSONB NOT NULL DEFAULT '{"mon":[{"start":"09:00","end":"17:00"}],"tue":[{"start":"09:00","end":"17:00"}],"wed":[{"start":"09:00","end":"17:00"}],"thu":[{"start":"09:00","end":"17:00"}],"fri":[{"start":"09:00","end":"17:00"}],"sat":[],"sun":[]}'::jsonb,
+  templates_json JSONB NOT NULL DEFAULT '{"intro":"Hi {{first_name}}, thanks for reaching out. Reply YES if you''d like to book your free trial.","follow_up":"Checking in on your trial request. Reply YES and I can help book a time.","slot_prompt":"Great. Reply with 1, 2, or 3 to pick a time: {{slot_1}}, {{slot_2}}, {{slot_3}}.","booked_confirmation":"Booked. We have you down for {{slot}}. Reply STOP to opt out.","reminder":"Reminder: your appointment is at {{slot}}. Reply if you need help.","invalid":"Sorry, I didn''t catch that. Reply YES to continue or STOP to opt out.","invalid_slot":"Please reply with 1, 2, or 3 to pick a time. Reply STOP to opt out."}'::jsonb,
+  throttle_caps_json JSONB NOT NULL DEFAULT '{"per_hour":2,"per_day":6,"invalid_response_limit":3}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (org_id, name)
@@ -218,8 +182,35 @@ CREATE TABLE IF NOT EXISTS kill_switch (
 CREATE UNIQUE INDEX IF NOT EXISTS kill_switch_scope_uidx
   ON kill_switch (org_id, COALESCE(location_id, '00000000-0000-0000-0000-000000000000'::uuid));
 CREATE INDEX IF NOT EXISTS kill_switch_org_enabled_idx ON kill_switch (org_id, enabled);
-`;
 
-export async function ensureSchema(): Promise<void> {
-  await query(SCHEMA_SQL);
-}
+-- Seed one org and one location for local development.
+INSERT INTO orgs (owner_user_id, name, slug)
+SELECT 'dev-user-123', 'GoldBot Demo Org', 'goldbot-demo-org'
+WHERE NOT EXISTS (
+  SELECT 1 FROM orgs WHERE owner_user_id = 'dev-user-123' AND name = 'GoldBot Demo Org'
+);
+
+INSERT INTO locations (
+  org_id,
+  name,
+  timezone,
+  business_hours_json,
+  templates_json,
+  throttle_caps_json
+)
+SELECT
+  o.id,
+  'Main Location',
+  'America/New_York',
+  '{"mon":[{"start":"09:00","end":"17:00"}],"tue":[{"start":"09:00","end":"17:00"}],"wed":[{"start":"09:00","end":"17:00"}],"thu":[{"start":"09:00","end":"17:00"}],"fri":[{"start":"09:00","end":"17:00"}],"sat":[],"sun":[]}'::jsonb,
+  '{"intro":"Hi {{first_name}}, thanks for reaching out. Reply YES if you''d like to book your free trial.","follow_up":"Checking in on your trial request. Reply YES and I can help book a time.","slot_prompt":"Great. Reply with 1, 2, or 3 to pick a time: {{slot_1}}, {{slot_2}}, {{slot_3}}.","booked_confirmation":"Booked. We have you down for {{slot}}. Reply STOP to opt out.","reminder":"Reminder: your appointment is at {{slot}}. Reply if you need help.","invalid":"Sorry, I didn''t catch that. Reply YES to continue or STOP to opt out.","invalid_slot":"Please reply with 1, 2, or 3 to pick a time. Reply STOP to opt out."}'::jsonb,
+  '{"per_hour":2,"per_day":6,"invalid_response_limit":3}'::jsonb
+FROM orgs o
+WHERE o.owner_user_id = 'dev-user-123'
+  AND o.name = 'GoldBot Demo Org'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM locations l
+    WHERE l.org_id = o.id
+      AND l.name = 'Main Location'
+  );

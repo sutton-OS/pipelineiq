@@ -4,11 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import {
+  ActivitySquare,
+  AlertTriangle,
+  Bot,
   FileText,
+  Inbox,
   LayoutDashboard,
+  ListChecks,
+  MessageSquareText,
   Menu,
   Settings,
-  Upload,
 } from "lucide-react";
 import {
   Sheet,
@@ -27,8 +32,13 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/leads", label: "Leads", icon: ListChecks },
+  { href: "/dashboard/intake", label: "Lead Intake", icon: Inbox },
+  { href: "/dashboard/inbound-sim", label: "Inbound Sim", icon: MessageSquareText },
+  { href: "/dashboard/staff-queue", label: "Staff Queue", icon: AlertTriangle },
+  { href: "/dashboard/audit", label: "Audit Log", icon: ActivitySquare },
+  { href: "/dashboard/settings/automation", label: "Automation", icon: Bot },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/upload", label: "Upload Data", icon: Upload },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

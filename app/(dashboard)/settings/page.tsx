@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { requireUserId } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
@@ -143,6 +144,24 @@ export default async function SettingsPage() {
 
               <Button type="submit">Save Team Settings</Button>
             </form>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-serif">Automation</h2>
+
+        <Card className="border-border bg-white/70">
+          <CardContent className="flex items-center justify-between gap-3 pt-6">
+            <div>
+              <p className="font-medium text-ink">GoldBot Automation Controls</p>
+              <p className="text-sm text-ink-2">
+                Configure kill-switches, business hours, templates, and throttle caps.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/dashboard/settings/automation">Open Automation Settings</Link>
+            </Button>
           </CardContent>
         </Card>
       </section>

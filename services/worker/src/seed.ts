@@ -1,19 +1,155 @@
 import { pool, query } from "./db";
-import { ensureSchema } from "./schema";
+import {
+  DEFAULT_BUSINESS_HOURS,
+  DEFAULT_THROTTLE_CAPS,
+  DEFAULT_TEMPLATES,
+  ensureSchema,
+} from "./schema";
 
 async function main(): Promise<void> {
   await ensureSchema();
 
-  const result = await query<{ id: string }>(
+  const insertedOrgResult = await query<{ id: string }>(
     `
-      INSERT INTO jobs (org_id, location_id, type, run_at, payload_json)
-      VALUES ($1, $2, $3, now(), $4::jsonb)
+      INSERT INTO orgs (owner_user_id, name, slug)
+      VALUES ($1, $2, $3)
+      ON CONFLICT DO NOTHING
       RETURNING id
     `,
-    ["dev-org", "dev-location", "hello_world", JSON.stringify({ msg: "hello" })],
+    ["dev-user-123", "GoldBot Demo Org", "goldbot-demo-org"],
   );
 
-  console.log(`seeded job id=${result.rows[0].id}`);
+  const orgId =
+    insertedOrgResult.rows[0]?.id ??
+    (
+      await query<{ id: string }>(
+        `
+          SELECT id
+          FROM orgs
+          WHERE owner_user_id = $1
+            AND lower(name) = lower($2)
+          LIMIT 1
+        `,
+        ["dev-user-123", "GoldBot Demo Org"],
+      )
+    ).rows[0]?.id;
+
+  if (!orgId) {
+    throw new Error("Failed to resolve seeded org");
+  }
+
+  const locationResult = await query<{ id: string }>(
+    `
+      INSERT INTO locations (
+        org_id,
+        name,
+        timezone,
+        business_hours_json,
+        templates_json,
+        throttle_caps_json
+      )
+      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)
+      ON CONFLICT (org_id, name)
+      DO UPDATE SET
+        timezone = EXCLUDED.timezone,
+        business_hours_json = EXCLUDED.business_hours_json,
+        templates_json = EXCLUDED.templates_json,
+        throttle_caps_json = EXCLUDED.throttle_caps_json,
+        updated_at = now()
+      RETURNING id
+    `,
+    [
+      orgId,
+      "Main Location",
+      "America/New_York",
+      JSON.stringify(DEFAULT_BUSINESS_HOURS),
+      JSON.stringify(DEFAULT_TEMPLATES),
+      JSON.stringify(DEFAULT_THROTTLE_CAPS),
+    ],
+  );
+
+  const locationId = locationResult.rows[0].id;
+
+  const leadResult = await query<{ id: string }>(
+    `
+      INSERT INTO leads (
+        org_id,
+        location_id,
+        full_name,
+        first_name,
+        phone,
+        normalized_phone,
+        consent_status,
+        source
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (org_id, location_id, normalized_phone)
+      DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        first_name = EXCLUDED.first_name,
+        phone = EXCLUDED.phone,
+        consent_status = EXCLUDED.consent_status,
+        source = EXCLUDED.source,
+        updated_at = now()
+      RETURNING id
+    `,
+    [
+      orgId,
+      locationId,
+      "Demo Lead",
+      "Demo",
+      "+1 (555) 555-0101",
+      "+15555550101",
+      "consented",
+      "seed",
+    ],
+  );
+
+  const leadId = leadResult.rows[0].id;
+
+  const conversationResult = await query<{ id: string }>(
+    `
+      INSERT INTO conversations (org_id, location_id, lead_id, state, stale_after_at)
+      VALUES ($1, $2, $3, $4, now() + interval '48 hours')
+      ON CONFLICT (org_id, lead_id)
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+    `,
+    [orgId, locationId, leadId, "awaiting_yes"],
+  );
+
+  const conversationId = conversationResult.rows[0].id;
+
+  await query(
+    `
+      INSERT INTO jobs (
+        org_id,
+        location_id,
+        type,
+        dedupe_key,
+        run_at,
+        payload_json
+      )
+      VALUES ($1, $2, $3, $4, now(), $5::jsonb)
+      ON CONFLICT (org_id, dedupe_key)
+      DO NOTHING
+    `,
+    [
+      orgId,
+      locationId,
+      "lead_created",
+      `seed:lead_created:${leadId}`,
+      JSON.stringify({
+        orgId,
+        locationId,
+        leadId,
+        conversationId,
+        source: "seed",
+      }),
+    ],
+  );
+
+  console.log(`seeded org=${orgId} location=${locationId} lead=${leadId}`);
 }
 
 void main()

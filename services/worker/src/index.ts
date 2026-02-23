@@ -4,7 +4,8 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 const EnvSchema = z.object({
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  DATABASE_URL: z.string().min(1).optional(),
+  WORKER_DATABASE_URL: z.string().min(1).optional(),
   NODE_ENV: z.string().default("development"),
 });
 
@@ -40,7 +41,11 @@ async function main() {
     throw new Error("Invalid environment configuration");
   }
 
-  const { NODE_ENV } = envResult.data;
+  const { NODE_ENV, DATABASE_URL, WORKER_DATABASE_URL } = envResult.data;
+  if (!DATABASE_URL && !WORKER_DATABASE_URL) {
+    console.error("[worker] DATABASE_URL or WORKER_DATABASE_URL must be set");
+    throw new Error("Invalid environment configuration");
+  }
   console.log(`[worker] starting (${NODE_ENV})`);
 
   const [{ pool }, { ensureSchema }, { runLoop }] = await Promise.all([

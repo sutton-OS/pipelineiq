@@ -380,8 +380,8 @@ export default function HomePage() {
           <div className="proof-grid">
             <div className="proof-card reveal">
               <div className="proof-quote">
-                "I finally know how close I am to my goal mid-period. Before this I had no idea
-                until payday."
+                &ldquo;I finally know how close I am to my goal mid-period. Before this I had no
+                idea until payday.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">TW</div>
@@ -393,8 +393,8 @@ export default function HomePage() {
             </div>
             <div className="proof-card reveal">
               <div className="proof-quote">
-                "The FP tracker is a game changer. I didn&apos;t realize I was missing $110 a period
-                just from people without trainers."
+                &ldquo;The FP tracker is a game changer. I didn&apos;t realize I was missing $110 a
+                period just from people without trainers.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">JR</div>
@@ -406,8 +406,8 @@ export default function HomePage() {
             </div>
             <div className="proof-card reveal">
               <div className="proof-quote">
-                "I showed my manager the PDF and she was actually impressed. Looks way more
-                professional than the spreadsheet."
+                &ldquo;I showed my manager the PDF and she was actually impressed. Looks way more
+                professional than the spreadsheet.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">SM</div>
@@ -485,7 +485,7 @@ export default function HomePage() {
               <div className="pricing-badge">Coming soon</div>
               <div className="pricing-plan">Pro</div>
               <div className="pricing-price">
-                <sup>$</sup>19<sub> / month</sub>
+                <sup>$</sup>29.99<sub> / month</sub>
               </div>
               <div className="pricing-desc">
                 For serious reps who want deeper insights, team comparisons, and manager sharing.
@@ -521,7 +521,7 @@ export default function HomePage() {
           <em>Start knowing.</em>
         </h2>
         <p className="reveal">
-          Drop in your spreadsheet and see your full commission report in under 30 seconds.
+          Drop in your spreadsheet and see your full commission report instantly.
         </p>
         <div className="cta-actions reveal">
           <button type="button" className="btn-primary" onClick={scrollToId("demo")}>

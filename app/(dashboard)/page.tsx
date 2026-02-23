@@ -1,373 +1,164 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { DashboardClient, type DashboardClientProps, type RepStatus } from "@/components/dashboard-client";
 import { requireUserId } from "@/lib/auth";
-import { createServerClient } from "@/lib/supabase";
-import type { Rep, RepMetrics, Report, Team } from "@/types/database";
+import {
+  ensureOrgAndLocation,
+  getDashboardSummary,
+  listLeadsForLocation,
+} from "@/lib/goldbot";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-const avatarPalette = [
-  { bg: "#e8f0fe", text: "#1a56db" },
-  { bg: "#fce8e6", text: "#c5221f" },
-  { bg: "#fef8e7", text: "#b06000" },
-  { bg: "#e6f4ea", text: "#137333" },
-  { bg: "#f3e8fd", text: "#7c3aed" },
-] as const;
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-const integerFormatter = new Intl.NumberFormat("en-US");
-
-function roundTo(value: number, decimals: number) {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
-
-function percentFrom(numerator: number, denominator: number, decimals = 0) {
-  if (denominator <= 0) return 0;
-  return roundTo((numerator / denominator) * 100, decimals);
-}
-
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
-
-function average(values: number[]) {
-  if (values.length === 0) return 0;
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return total / values.length;
-}
-
-function formatCurrency(value: number) {
-  return currencyFormatter.format(value);
-}
-
-function formatInteger(value: number) {
-  return integerFormatter.format(value);
-}
-
-function formatPercent(value: number, decimals = 0) {
-  const fixed = value.toFixed(decimals).replace(/\.0+$/, "");
-  return `${fixed}%`;
-}
-
-function formatDays(value: number | null) {
-  if (value === null) return "\u2014";
-  return `${value.toFixed(1).replace(/\.0$/, "")}d`;
-}
-
-function initialsFromName(name: string) {
-  const pieces = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (pieces.length === 0) return "??";
-  if (pieces.length === 1) return pieces[0].slice(0, 2).toUpperCase();
-  return `${pieces[0][0] ?? ""}${pieces[1][0] ?? ""}`.toUpperCase();
-}
-
-function formatPeriodLabel(report: Report) {
-  const start = new Date(report.period_start);
-  const end = new Date(report.period_end);
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return report.name;
-
-  const dateFmt = new Intl.DateTimeFormat("en-US", {
+function formatDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-  });
-
-  return `${dateFmt.format(start)} - ${dateFmt.format(end)}`;
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
 }
 
-function EmptyDashboard() {
+function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center">
-      <div
-        className="w-full max-w-md rounded-2xl border px-8 py-10 text-center"
-        style={{ background: "var(--paper)", borderColor: "var(--border)" }}
-      >
-        <h1 className="text-2xl font-medium text-ink">No data yet</h1>
-        <p className="mt-2 text-sm text-ink-3">
-          Upload your first CSV to generate a team dashboard.
-        </p>
-        <Link
-          href="/dashboard/upload"
-          className="mt-6 inline-flex h-10 items-center justify-center rounded-md px-5 text-sm font-medium text-white transition-opacity duration-150 hover:opacity-90"
-          style={{ background: "var(--ink)" }}
-        >
-          Upload report
-        </Link>
-      </div>
-    </div>
+    <Card className="border-border bg-white/70">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-ink-2">{label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-3xl font-serif">{value}</p>
+      </CardContent>
+    </Card>
   );
 }
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
-  const supabase = createServerClient();
+  const context = await ensureOrgAndLocation(userId);
 
-  const { data: teamRows, error: teamError } = await supabase
-    .from("teams")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const [summary, leads] = await Promise.all([
+    getDashboardSummary(context),
+    listLeadsForLocation(context),
+  ]);
 
-  if (teamError) throw new Error(teamError.message);
+  const recentLeads = leads.slice(0, 8);
 
-  const team = (teamRows?.[0] as Team | undefined) ?? null;
-  if (!team) return <EmptyDashboard />;
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-serif">GoldBot Operations</h1>
+          <p className="text-sm text-ink-2">
+            {context.locationName} ({context.timezone})
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/intake">New Lead Intake</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/staff-queue">Needs Staff Attention</Link>
+          </Button>
+        </div>
+      </header>
 
-  const { data: reportRows, error: reportError } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("team_id", team.id)
-    .order("period_end", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(2);
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total Leads" value={summary.totalLeads} />
+        <MetricCard label="Booked" value={summary.bookedConversations} />
+        <MetricCard label="Awaiting YES" value={summary.awaitingYes} />
+        <MetricCard label="Awaiting Time Choice" value={summary.awaitingTimeChoice} />
+        <MetricCard label="Staff Attention" value={summary.staffAttention} />
+        <MetricCard label="Dead Jobs" value={summary.deadJobs} />
+        <MetricCard label="Outbound (24h)" value={summary.outboundLast24h} />
+      </section>
 
-  if (reportError) throw new Error(reportError.message);
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-border bg-white/70">
+          <CardHeader>
+            <CardTitle>Recent Leads</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentLeads.length === 0 ? (
+              <p className="text-sm text-ink-2">No leads yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Consent</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentLeads.map((lead) => (
+                    <TableRow key={lead.id}>
+                      <TableCell>{lead.fullName}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{lead.state}</Badge>
+                      </TableCell>
+                      <TableCell>{lead.optedOut ? "opted_out" : lead.consentStatus}</TableCell>
+                      <TableCell>
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/dashboard/leads/${lead.id}`}>Open</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-  const mostRecentReport = (reportRows?.[0] as Report | undefined) ?? null;
-  const previousReport = (reportRows?.[1] as Report | undefined) ?? null;
-
-  if (!mostRecentReport) return <EmptyDashboard />;
-
-  const previousMetricsQuery = previousReport
-    ? supabase
-        .from("rep_metrics")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("report_id", previousReport.id)
-    : Promise.resolve({ data: [] as RepMetrics[], error: null });
-
-  const [{ data: repsData, error: repsError }, { data: metricsData, error: metricsError }, previousMetricsResult] =
-    await Promise.all([
-      supabase
-        .from("reps")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("team_id", team.id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("rep_metrics")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("report_id", mostRecentReport.id),
-      previousMetricsQuery,
-    ]);
-
-  if (repsError) throw new Error(repsError.message);
-  if (metricsError) throw new Error(metricsError.message);
-  if (previousMetricsResult.error) throw new Error(previousMetricsResult.error.message);
-
-  const reps = (repsData as Rep[] | null) ?? [];
-  const currentMetrics = (metricsData as RepMetrics[] | null) ?? [];
-  const previousMetrics = (previousMetricsResult.data as RepMetrics[] | null) ?? [];
-  const metricsByRepId = new Map(currentMetrics.map((metric) => [metric.rep_id, metric]));
-
-  let teamRevenue = 0;
-  let totalLeads = 0;
-  let totalContacted = 0;
-  let totalQualified = 0;
-  let totalDemos = 0;
-  let totalClosed = 0;
-  let totalCalls = 0;
-  let totalEmails = 0;
-
-  const avgDealValues: number[] = [];
-  const avgDaysValues: number[] = [];
-
-  for (const metric of currentMetrics) {
-    const revenue = Number(metric.revenue);
-    const leads = Number(metric.leads);
-    const contacts = Number(metric.contacts);
-    const qualified = Number(metric.qualified);
-    const demos = Number(metric.demos);
-    const closed = Number(metric.deals_closed);
-    const calls = Number(metric.calls);
-    const emails = Number(metric.emails);
-    const avgDealSize = Number(metric.avg_deal_size);
-    const avgDaysToClose = Number(metric.avg_days_to_close);
-
-    teamRevenue += revenue;
-    totalLeads += leads;
-    totalContacted += contacts;
-    totalQualified += qualified;
-    totalDemos += demos;
-    totalClosed += closed;
-    totalCalls += calls;
-    totalEmails += emails;
-    avgDealValues.push(avgDealSize);
-    avgDaysValues.push(avgDaysToClose);
-  }
-
-  const teamGoal = Number(team.goal_monthly);
-  const goalPercent = teamGoal > 0 ? Math.round((teamRevenue / teamGoal) * 100) : 0;
-  const isPaceBehind = goalPercent < 78;
-  const avgDealSize = roundTo(average(avgDealValues), 0);
-  const conversionRate = percentFrom(totalQualified, totalLeads, 1);
-  const avgDaysToClose = roundTo(average(avgDaysValues), 1);
-  const totalActivity = totalCalls + totalEmails + totalDemos;
-  const remainingToGoal = Math.max(teamGoal - teamRevenue, 0);
-  const goalBarPercent = clampPercent(goalPercent);
-
-  const previousAvgDealSize =
-    previousMetrics.length > 0
-      ? average(previousMetrics.map((metric) => Number(metric.avg_deal_size)))
-      : null;
-
-  const avgDealDeltaPercent =
-    previousAvgDealSize && previousAvgDealSize > 0
-      ? Math.round(((avgDealSize - previousAvgDealSize) / previousAvgDealSize) * 100)
-      : null;
-
-  const avgDealDeltaDisplay =
-    avgDealDeltaPercent === null
-      ? null
-      : `${avgDealDeltaPercent > 0 ? "+" : ""}${avgDealDeltaPercent}% vs previous`;
-
-  const avgDealDeltaTone =
-    avgDealDeltaPercent === null ? "neutral" : avgDealDeltaPercent >= 0 ? "positive" : "negative";
-
-  const repRows = reps
-    .map((rep, repIndex) => {
-      const metric = metricsByRepId.get(rep.id);
-      const revenue = Number(metric?.revenue ?? 0);
-      const quota = Number(metric?.quota ?? 0);
-      const dealsClosed = Number(metric?.deals_closed ?? 0);
-      const leads = Number(metric?.leads ?? 0);
-      const qualified = Number(metric?.qualified ?? 0);
-      const repDaysRaw = metric ? Number(metric.avg_days_to_close) : null;
-      const repDays = repDaysRaw !== null && Number.isFinite(repDaysRaw) ? repDaysRaw : null;
-      const repConversion = percentFrom(qualified, leads, 0);
-      const quotaPercent = quota > 0 ? Math.round((revenue / quota) * 100) : 0;
-      const quotaBarPercent = clampPercent(quotaPercent);
-      const status: RepStatus =
-        quotaPercent >= 100 ? "On Track" : quotaPercent >= 75 ? "At Risk" : "Behind";
-      const palette = avatarPalette[repIndex % avatarPalette.length];
-
-      return {
-        repId: rep.id,
-        rank: 0,
-        name: rep.name,
-        role: rep.role ?? "Sales Rep",
-        initials: initialsFromName(rep.name),
-        avatarBg: palette.bg,
-        avatarText: palette.text,
-        revenue,
-        revenueDisplay: formatCurrency(revenue),
-        quotaPercent,
-        quotaPercentDisplay: formatPercent(quotaPercent, 0),
-        quotaBarPercent,
-        status,
-        dealsClosed,
-        conversionRate: repConversion,
-        conversionRateDisplay: formatPercent(repConversion, 0),
-        avgDaysToClose: repDays,
-        avgDaysToCloseDisplay: formatDays(repDays),
-      };
-    })
-    .sort((a, b) => {
-      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
-      return a.name.localeCompare(b.name);
-    })
-    .map((rep, index) => ({ ...rep, rank: index + 1 }));
-
-  const funnelStages = [
-    { label: "Leads", value: totalLeads },
-    { label: "Contacted", value: totalContacted },
-    { label: "Qualified", value: totalQualified },
-    { label: "Demo", value: totalDemos },
-    { label: "Closed", value: totalClosed },
-  ].map((stage) => {
-    const percent = stage.label === "Leads" ? (totalLeads > 0 ? 100 : 0) : percentFrom(stage.value, totalLeads, 0);
-    return {
-      label: stage.label,
-      value: stage.value,
-      valueDisplay: formatInteger(stage.value),
-      percent,
-      percentDisplay: formatPercent(percent, 0),
-      barPercent: clampPercent(percent),
-    };
-  });
-
-  const timeToCloseRows = repRows
-    .map((rep) => {
-      let tone: "green" | "amber" | "red" | "neutral" = "neutral";
-      if (rep.avgDaysToClose !== null) {
-        if (rep.avgDaysToClose <= 28) tone = "green";
-        else if (rep.avgDaysToClose <= 45) tone = "amber";
-        else tone = "red";
-      }
-
-      return {
-        repId: rep.repId,
-        name: rep.name,
-        days: rep.avgDaysToClose,
-        daysDisplay: rep.avgDaysToCloseDisplay,
-        tone,
-      };
-    })
-    .sort((a, b) => {
-      if (a.days === null && b.days === null) return a.name.localeCompare(b.name);
-      if (a.days === null) return 1;
-      if (b.days === null) return -1;
-      return a.days - b.days;
-    });
-
-  const props: DashboardClientProps = {
-    teamName: team.name,
-    reportName: mostRecentReport.name,
-    periodLabel: formatPeriodLabel(mostRecentReport),
-    teamRevenue,
-    teamRevenueDisplay: formatCurrency(teamRevenue),
-    teamGoal,
-    teamGoalDisplay: formatCurrency(teamGoal),
-    goalPercent,
-    goalPercentDisplay: formatPercent(goalPercent, 0),
-    goalBarPercent,
-    remainingToGoal,
-    remainingToGoalDisplay: formatCurrency(remainingToGoal),
-    isPaceBehind,
-    avgDealSize,
-    avgDealSizeDisplay: formatCurrency(avgDealSize),
-    avgDealDeltaDisplay,
-    avgDealDeltaTone,
-    conversionRate,
-    conversionRateDisplay: formatPercent(conversionRate, 1),
-    avgDaysToClose,
-    avgDaysToCloseDisplay: `${avgDaysToClose.toFixed(1).replace(/\.0$/, "")} days`,
-    totalActivity,
-    totalActivityDisplay: formatInteger(totalActivity),
-    totalLeads,
-    totalContacted,
-    totalQualified,
-    totalDemos,
-    totalClosed,
-    repRows,
-    funnelStages,
-    timeToCloseRows,
-    activityBreakdown: {
-      calls: totalCalls,
-      callsDisplay: formatInteger(totalCalls),
-      emails: totalEmails,
-      emailsDisplay: formatInteger(totalEmails),
-      demos: totalDemos,
-      demosDisplay: formatInteger(totalDemos),
-      totalTouches: totalActivity,
-      totalTouchesDisplay: formatInteger(totalActivity),
-    },
-  };
-
-  return <DashboardClient {...props} />;
+        <Card className="border-border bg-white/70">
+          <CardHeader>
+            <CardTitle>Recent Messages</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {summary.recentMessages.length === 0 ? (
+              <p className="text-sm text-ink-2">No message activity.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>Dir</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Body</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.recentMessages.map((message) => (
+                    <TableRow key={message.id}>
+                      <TableCell>{formatDate(message.createdAt)}</TableCell>
+                      <TableCell>{message.leadName}</TableCell>
+                      <TableCell>{message.direction}</TableCell>
+                      <TableCell>{message.status}</TableCell>
+                      <TableCell className="max-w-xs whitespace-normal">{message.body}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
 }

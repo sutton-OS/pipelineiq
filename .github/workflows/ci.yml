@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master", "codex/**"]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pipelineiq
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
+      WORKER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
+      NODE_ENV: test
+      DEV_USER_ID: ci-user
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Install worker dependencies
+        run: npm --prefix services/worker ci
+
+      - name: Apply SQL migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/202602230001_goldbot_v1.sql
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (web)
+        run: npm run typecheck
+
+      - name: Typecheck (worker)
+        run: npm run worker:typecheck
+
+      - name: Worker tests
+        run: npm run worker:test

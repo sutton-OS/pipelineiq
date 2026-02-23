@@ -5,22 +5,11 @@ async function enqueueHello() {
     return NextResponse.json({ error: "Not Found" }, { status: 404 });
   }
 
-  const { pgPool } = await import("@/lib/pg");
-
-  await pgPool.query(
-    `
-      INSERT INTO jobs (org_id, location_id, type, run_at, payload_json)
-      VALUES ($1, $2, $3, now(), $4::jsonb)
-    `,
-    [
-      "dev-org",
-      "dev-location",
-      "hello_world",
-      JSON.stringify({ msg: "hello from web" }),
-    ],
-  );
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    message:
+      "Dev enqueue endpoint is deprecated. Use /dashboard/intake or /dashboard/inbound-sim to create real jobs.",
+  });
 }
 
 export async function POST() {

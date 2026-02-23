@@ -20,10 +20,10 @@ function loadEnvFiles(): void {
 
 loadEnvFiles();
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.WORKER_DATABASE_URL ?? process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL is required");
+  throw new Error("DATABASE_URL (or WORKER_DATABASE_URL) is required");
 }
 
 export const pool = new Pool({ connectionString });

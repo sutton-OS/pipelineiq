@@ -10,7 +10,11 @@
     "worker:dev": "npm --prefix services/worker run dev",
     "worker:build": "npm --prefix services/worker run build",
     "worker:start": "npm --prefix services/worker run start",
-    "dev:all": "npm run dev & npm run worker:dev & wait"
+    "dev:all": "npm run dev & npm run worker:dev & wait",
+    "typecheck": "tsc --noEmit",
+    "worker:typecheck": "npm --prefix services/worker run typecheck",
+    "worker:test": "npm --prefix services/worker run test",
+    "ci": "npm run lint && npm run typecheck && npm run worker:typecheck && npm run worker:test"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.38.0",
