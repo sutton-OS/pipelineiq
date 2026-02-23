@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type CsvRawRow = string[];
@@ -538,6 +538,7 @@ function buildCommissionReport(data: ParsedCommissionData, selectedYear: number)
 
 export function ReportUploader() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const reportExportRef = useRef<HTMLDivElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -2005,104 +2006,96 @@ export function ReportUploader() {
 
   async function exportPdf() {
     if (!report || isGenerating) return;
+    const reportNode = reportExportRef.current;
+    if (!reportNode) return;
 
     setIsGenerating(true);
+    const safeName = sanitizeFileName(fileName) || "commission-report";
+    const printFrame = document.createElement("iframe");
+    printFrame.setAttribute("aria-hidden", "true");
+    printFrame.style.position = "fixed";
+    printFrame.style.right = "0";
+    printFrame.style.bottom = "0";
+    printFrame.style.width = "0";
+    printFrame.style.height = "0";
+    printFrame.style.opacity = "0";
+    printFrame.style.pointerEvents = "none";
+    printFrame.style.border = "0";
+    document.body.appendChild(printFrame);
+    const removePrintFrame = () => {
+      if (document.body.contains(printFrame)) {
+        document.body.removeChild(printFrame);
+      }
+    };
 
     try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const printWindow = printFrame.contentWindow;
+      const printDoc = printFrame.contentDocument;
+      if (!printWindow || !printDoc) {
+        throw new Error("Unable to initialize PDF print frame.");
+      }
 
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 14;
-      let y = 18;
+      const clonedReport = reportNode.cloneNode(true) as HTMLDivElement;
 
-      const drawFooter = () => {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(120, 120, 120);
-        doc.text(
-          `PipelineIQ - Generated ${new Date().toLocaleDateString("en-US")}`,
-          pageWidth / 2,
-          pageHeight - 8,
-          { align: "center" }
-        );
+      printDoc.open();
+      printDoc.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeName}.pdf</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" />
+    <style>
+      @page { size: auto; margin: 10mm; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: ${darkMode ? "#111318" : "#f7f5f0"};
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+    </style>
+  </head>
+  <body></body>
+</html>`);
+      printDoc.close();
+
+      if (darkMode) {
+        const darkShell = printDoc.createElement("div");
+        darkShell.className = "dm";
+        darkShell.appendChild(clonedReport);
+        printDoc.body.appendChild(darkShell);
+      } else {
+        printDoc.body.appendChild(clonedReport);
+      }
+
+      await new Promise<void>((resolve) => {
+        if (printDoc.readyState === "complete") {
+          resolve();
+          return;
+        }
+        printWindow.addEventListener("load", () => resolve(), { once: true });
+      });
+
+      try {
+        await printDoc.fonts.ready;
+      } catch {}
+
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+      const cleanup = () => {
+        window.setTimeout(() => {
+          removePrintFrame();
+        }, 250);
       };
 
-      doc.setFillColor(247, 245, 240);
-      doc.rect(0, 0, pageWidth, pageHeight, "F");
-
-      doc.setTextColor(15, 15, 15);
-      doc.setFont("times", "normal");
-      doc.setFontSize(24);
-      doc.text("Commission Report", margin, y);
-
-      y += 6;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(90, 90, 90);
-      doc.text(`Source: ${fileName || "Uploaded CSV"}`, margin, y);
-
-      y += 10;
-      doc.setTextColor(15, 15, 15);
-      doc.setFontSize(12);
-      doc.text(`Total Commissions: ${formatCurrency(report.totalRevenue)}`, margin, y);
-      y += 6;
-      doc.text(`Total Sales: ${report.totalSales}`, margin, y);
-      y += 6;
-      doc.text(`FP Attach Rate: ${formatPercent(report.fpRate)}`, margin, y);
-      y += 6;
-      doc.text(`Avg Commission / Sale: ${formatCurrency(report.avgCommission)}`, margin, y);
-      y += 6;
-      doc.text(`Total Bonuses: ${formatCurrency(report.totalBonuses)}`, margin, y);
-
-      y += 10;
-      doc.setFont("helvetica", "bold");
-      doc.text("Pay Periods", margin, y);
-      y += 6;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-
-      for (const period of report.payPeriods) {
-        if (y > pageHeight - 20) {
-          drawFooter();
-          doc.addPage();
-          doc.setFillColor(247, 245, 240);
-          doc.rect(0, 0, pageWidth, pageHeight, "F");
-          y = 16;
-        }
-
-        doc.text(period.label, margin, y);
-        doc.text(formatCurrency(period.amount), margin + 86, y);
-        doc.text(formatUnits(period.units), margin + 122, y);
-        doc.text(period.bonus > 0 ? `+${formatCurrency(period.bonus)}` : "-", margin + 150, y);
-        y += 5.5;
-      }
-
-      y += 4;
-      doc.setFont("helvetica", "bold");
-      doc.text("Top Trainers", margin, y);
-      y += 6;
-      doc.setFont("helvetica", "normal");
-
-      for (const trainer of report.trainerCounts.slice(0, 10)) {
-        if (y > pageHeight - 20) {
-          drawFooter();
-          doc.addPage();
-          doc.setFillColor(247, 245, 240);
-          doc.rect(0, 0, pageWidth, pageHeight, "F");
-          y = 16;
-        }
-
-        doc.text(trainer.name, margin, y);
-        doc.text(`${trainer.count} FPs`, margin + 80, y);
-        y += 5.5;
-      }
-
-      drawFooter();
-      const safeName = sanitizeFileName(fileName) || "commission-report";
-      doc.save(`${safeName}.pdf`);
+      printWindow.addEventListener("afterprint", cleanup, { once: true });
+      printWindow.focus();
+      printWindow.print();
+      window.setTimeout(cleanup, 60_000);
+    } catch {
+      removePrintFrame();
     } finally {
       setIsGenerating(false);
     }
@@ -2110,7 +2103,7 @@ export function ReportUploader() {
 
   return (
     <section
-      className="relative min-h-screen bg-[#f7f5f0] px-4 pb-32 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
+      className="relative min-h-screen bg-[#f7f5f0] px-4 pb-12 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       <div className="mx-auto w-full max-w-[960px] space-y-6">
@@ -2236,6 +2229,24 @@ export function ReportUploader() {
                     </div>
                   </>
                 ) : null}
+                <Button
+                  type="button"
+                  disabled={isGenerating || !report}
+                  onClick={exportPdf}
+                  className="h-9 border border-[#2f2f2f] bg-[#0f0f0f] px-3.5 text-xs font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Preparing PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Export PDF
+                    </>
+                  )}
+                </Button>
                 <button
                   type="button"
                   aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
@@ -2274,30 +2285,10 @@ export function ReportUploader() {
                   </svg>
                 </button>
               </div>
-              <div dangerouslySetInnerHTML={{ __html: reportHTML }} />
+              <div ref={reportExportRef} dangerouslySetInnerHTML={{ __html: reportHTML }} />
             </div>
           </div>
         ) : null}
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#232323] bg-[#0f0f0f] px-4 py-4 sm:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-[960px]">
-          <Button
-            type="button"
-            disabled={isGenerating || !report}
-            onClick={exportPdf}
-            className="h-12 w-full border border-[#2f2f2f] bg-[#0f0f0f] text-sm font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Exporting PDF...
-              </>
-            ) : (
-              "Export PDF"
-            )}
-          </Button>
-        </div>
       </div>
     </section>
   );
