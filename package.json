@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev apps/web",
-    "build": "next build apps/web",
+    "build": "next build apps/web --webpack",
     "start": "next start apps/web",
     "lint": "eslint --config apps/web/eslint.config.mjs apps/web",
     "worker:dev": "npm --prefix apps/worker run dev",
