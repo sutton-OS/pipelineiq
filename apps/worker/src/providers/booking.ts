@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { BookingProvider } from "../types";
+import type { BookingProvider } from "@pipelineiq/engine";
 
 type BookAppointmentInput = {
   provider: BookingProvider;

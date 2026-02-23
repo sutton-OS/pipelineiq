@@ -1,14 +1,14 @@
 import type { PoolClient } from "pg";
 import { pool } from "./db";
 import { bookAppointmentViaProvider } from "./providers/booking";
-import { createActionKey } from "./templates";
+import { createActionKey } from "@pipelineiq/engine";
 import type {
   ActionGatewayInput,
   ActionResult,
   ConversationContext,
   GovernorDecision,
   ProposedAction,
-} from "./types";
+} from "@pipelineiq/engine";
 
 type MutationResult = {
   details: Record<string, unknown>;

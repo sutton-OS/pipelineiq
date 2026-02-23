@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   isWithinBusinessHours,
   nextBusinessDaySlots,
-} from "./businessHours";
+} from "@pipelineiq/engine";
 
 const businessHours = {
   mon: [{ start: "09:00", end: "17:00" }],

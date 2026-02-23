@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateStateMachine } from "./stateMachine";
-import type { ConversationContext } from "./types";
+import { evaluateStateMachine } from "@pipelineiq/engine";
+import type { ConversationContext } from "@pipelineiq/engine";
 
 function buildContext(overrides: Partial<ConversationContext> = {}): ConversationContext {
   return {

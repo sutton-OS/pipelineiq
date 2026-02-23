@@ -8,7 +8,7 @@ import {
   DEFAULT_TEMPLATES,
   ensureSchema,
 } from "./schema";
-import type { ActionGatewayInput, ConversationContext, GovernorDecision } from "./types";
+import type { ActionGatewayInput, ConversationContext, GovernorDecision } from "@pipelineiq/engine";
 
 function canRunIntegrationTests(): boolean {
   return Boolean(process.env.DATABASE_URL || process.env.WORKER_DATABASE_URL);

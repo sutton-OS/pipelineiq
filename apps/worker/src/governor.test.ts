@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { governActions } from "./governor";
-import type { ConversationContext, ProposedAction } from "./types";
+import { governActions } from "@pipelineiq/engine";
+import type { ConversationContext, ProposedAction } from "@pipelineiq/engine";
 
 function buildContext(overrides: Partial<ConversationContext> = {}): ConversationContext {
   return {
