@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Syne } from "next/font/google";
 import { ReportUploader } from "@/components/ReportUploader";
+import { Button } from "@/components/ui/button";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -55,9 +57,14 @@ export default function HomePage() {
           <a href="#pricing">Pricing</a>
           <a href="#demo">Try it</a>
         </div>
-        <button type="button" className="nav-cta" onClick={scrollToId("demo")}>
-          Get your report →
-        </button>
+        <div className="nav-actions">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard">Dashboard</Link>
+          </Button>
+          <button type="button" className="nav-cta" onClick={scrollToId("demo")}>
+            Get your report →
+          </button>
+        </div>
       </nav>
 
       <section className="hero">
@@ -624,6 +631,12 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           gap: 32px;
+        }
+
+        .nav-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
         }
 
         .nav-links a {

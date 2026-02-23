@@ -12,10 +12,11 @@ import {
   ensureOrgAndLocation,
   getLocationSettings,
 } from "@/lib/goldbot";
+import { AutomationSettingsForm } from "@/components/goldbot/automation-settings-form";
+import { GoldBotPageShell } from "@/components/goldbot/page-shell";
+import { SectionCard } from "@/components/goldbot/section-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export const metadata: Metadata = {
   title: "Automation",
@@ -52,40 +53,68 @@ export default async function AutomationSettingsPage({
   const context = await ensureOrgAndLocation(userId);
   const settings = await getLocationSettings(context);
   const canManageAutomation = settings.role === "owner";
+  const hasActiveKillSwitch = settings.globalKillEnabled || settings.locationKillEnabled;
 
   const params = (await searchParams) ?? {};
   const error = typeof params.error === "string" ? params.error : null;
   const success = typeof params.success === "string" ? params.success : null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-4xl font-serif">Kill Switch & Automation Settings</h1>
-        <p className="text-sm text-ink-2">
-          Immediate stop controls plus business hours, templates, and throttles.
-        </p>
-      </header>
-
+    <GoldBotPageShell
+      title="Trust Center"
+      subtitle="Safety controls and automation policy for governed operation."
+      headerClassName="items-start gap-6 rounded-2xl border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] px-5 py-5 md:px-6"
+      maxWidth="7xl"
+      actions={
+        hasActiveKillSwitch ? (
+          <Badge
+            variant="outline"
+            className="border-red-300/55 bg-red-500/20 px-2.5 py-1 text-[11px] text-red-100"
+          >
+            Emergency stop active
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="border-border/70 bg-paper/50 px-2.5 py-1 text-[11px] text-ink-2"
+          >
+            Automation ready
+          </Badge>
+        )
+      }
+    >
       {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-md border border-red-300/60 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-md border border-emerald-300/60 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
           {success}
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-border bg-white/70">
-          <CardHeader>
-            <CardTitle>Global Kill Switch</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <SectionCard
+        title="Kill Switch"
+        description="Hard stop controls that immediately halt autonomous actions at org and location scope."
+        className={
+          hasActiveKillSwitch
+            ? "border-red-300/65 bg-[linear-gradient(135deg,rgba(239,68,68,0.14),rgba(239,68,68,0.04))]"
+            : undefined
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-lg border border-border/70 bg-paper/25 p-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-ink">Global Kill Switch</h3>
+              <p className="text-xs text-ink-2">Affects all locations in this organization.</p>
+            </div>
+            <p className="text-sm text-ink-2">
+              Current: <strong>{settings.globalKillEnabled ? "Enabled" : "Disabled"}</strong>
+            </p>
             {canManageAutomation ? (
-              <form action={submitKillSwitch} className="space-y-3">
+              <form action={submitKillSwitch}>
                 <input type="hidden" name="scope" value="org" />
                 <input type="hidden" name="reason" value="set from dashboard" />
                 <input
@@ -93,28 +122,26 @@ export default async function AutomationSettingsPage({
                   name="enabled"
                   value={settings.globalKillEnabled ? "false" : "true"}
                 />
-                <p className="text-sm text-ink-2">
-                  Current: <strong>{settings.globalKillEnabled ? "Enabled" : "Disabled"}</strong>
-                </p>
-                <Button type="submit" variant={settings.globalKillEnabled ? "outline" : "destructive"}>
+                <Button
+                  type="submit"
+                  variant={settings.globalKillEnabled ? "outline" : "destructive"}
+                >
                   {settings.globalKillEnabled ? "Disable Global Kill" : "Enable Global Kill"}
                 </Button>
               </form>
-            ) : (
-              <p className="text-sm text-ink-2">
-                Current: <strong>{settings.globalKillEnabled ? "Enabled" : "Disabled"}</strong>
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            ) : null}
+          </div>
 
-        <Card className="border-border bg-white/70">
-          <CardHeader>
-            <CardTitle>Location Kill Switch</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <div className="space-y-3 rounded-lg border border-border/70 bg-paper/25 p-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-ink">Location Kill Switch</h3>
+              <p className="text-xs text-ink-2">Only affects this location.</p>
+            </div>
+            <p className="text-sm text-ink-2">
+              Current: <strong>{settings.locationKillEnabled ? "Enabled" : "Disabled"}</strong>
+            </p>
             {canManageAutomation ? (
-              <form action={submitKillSwitch} className="space-y-3">
+              <form action={submitKillSwitch}>
                 <input type="hidden" name="scope" value="location" />
                 <input type="hidden" name="reason" value="set from dashboard" />
                 <input
@@ -122,9 +149,6 @@ export default async function AutomationSettingsPage({
                   name="enabled"
                   value={settings.locationKillEnabled ? "false" : "true"}
                 />
-                <p className="text-sm text-ink-2">
-                  Current: <strong>{settings.locationKillEnabled ? "Enabled" : "Disabled"}</strong>
-                </p>
                 <Button
                   type="submit"
                   variant={settings.locationKillEnabled ? "outline" : "destructive"}
@@ -132,132 +156,64 @@ export default async function AutomationSettingsPage({
                   {settings.locationKillEnabled ? "Disable Location Kill" : "Enable Location Kill"}
                 </Button>
               </form>
-            ) : (
-              <p className="text-sm text-ink-2">
-                Current: <strong>{settings.locationKillEnabled ? "Enabled" : "Disabled"}</strong>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            ) : null}
+          </div>
+        </div>
+      </SectionCard>
 
-      <Card className="border-border bg-white/70">
-        <CardHeader>
-          <CardTitle>Location Automation Config</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!canManageAutomation ? (
-            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Staff members have read-only access. Owner role is required to change automation controls.
-            </p>
-          ) : null}
+      <SectionCard
+        title="Automation Controls"
+        description="Choose autonomy posture and booking integration. Changes apply to new decisions immediately after save."
+      >
+        {!canManageAutomation ? (
+          <p className="mb-4 rounded-md border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            Staff members have read-only access. Owner role is required to change automation controls.
+          </p>
+        ) : null}
 
-          <form action={submitAutomationSettings} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone</Label>
-              <Input
-                id="timezone"
-                name="timezone"
-                defaultValue={settings.timezone || "America/New_York"}
-                required
-                disabled={!canManageAutomation}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="autonomyMode">Autonomy Mode</Label>
-              <select
-                id="autonomyMode"
-                name="autonomyMode"
-                defaultValue={settings.autonomyMode}
-                disabled={!canManageAutomation}
-                className="border-input bg-background focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-              >
-                <option value="suggest_only">suggest_only (staff approval required)</option>
-                <option value="safe_auto">safe_auto (governed auto actions)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bookingProvider">Booking Provider</Label>
-              <select
-                id="bookingProvider"
-                name="bookingProvider"
-                defaultValue={settings.bookingProvider}
-                disabled={!canManageAutomation}
-                className="border-input bg-background focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-              >
-                <option value="none">none (simulation fallback)</option>
-                <option value="google_calendar">google_calendar</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bookingSettingsJson">Booking Settings JSON</Label>
-              <textarea
-                id="bookingSettingsJson"
-                name="bookingSettingsJson"
-                rows={6}
-                disabled={!canManageAutomation}
-                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-                defaultValue={JSON.stringify(settings.bookingSettingsJson || {}, null, 2)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="businessHoursJson">Business Hours JSON</Label>
-              <textarea
-                id="businessHoursJson"
-                name="businessHoursJson"
-                rows={8}
-                disabled={!canManageAutomation}
-                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-                defaultValue={JSON.stringify(
-                  settings.businessHoursJson || DEFAULT_GOLDBOT_BUSINESS_HOURS,
-                  null,
-                  2,
-                )}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="templatesJson">Templates JSON</Label>
-              <textarea
-                id="templatesJson"
-                name="templatesJson"
-                rows={10}
-                disabled={!canManageAutomation}
-                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-                defaultValue={JSON.stringify(
-                  settings.templatesJson || DEFAULT_GOLDBOT_TEMPLATES,
-                  null,
-                  2,
-                )}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="throttleCapsJson">Throttle Caps JSON</Label>
-              <textarea
-                id="throttleCapsJson"
-                name="throttleCapsJson"
-                rows={5}
-                disabled={!canManageAutomation}
-                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
-                defaultValue={JSON.stringify(
-                  settings.throttleCapsJson || DEFAULT_GOLDBOT_THROTTLE_CAPS,
-                  null,
-                  2,
-                )}
-              />
-            </div>
-
-            <Button type="submit" disabled={!canManageAutomation}>
-              Save Automation Settings
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        <AutomationSettingsForm
+          canManageAutomation={canManageAutomation}
+          timezone={settings.timezone || "America/New_York"}
+          autonomyMode={settings.autonomyMode}
+          bookingProvider={settings.bookingProvider}
+          submitAction={submitAutomationSettings}
+          jsonFields={[
+            {
+              id: "bookingSettingsJson",
+              label: "Booking Settings JSON",
+              rows: 6,
+              initialValue: JSON.stringify(settings.bookingSettingsJson || {}, null, 2),
+            },
+            {
+              id: "businessHoursJson",
+              label: "Business Hours JSON",
+              rows: 8,
+              initialValue: JSON.stringify(
+                settings.businessHoursJson || DEFAULT_GOLDBOT_BUSINESS_HOURS,
+                null,
+                2,
+              ),
+              helper: "Working-hours policy in local timezone.",
+            },
+            {
+              id: "templatesJson",
+              label: "Templates JSON",
+              rows: 10,
+              initialValue: JSON.stringify(settings.templatesJson || DEFAULT_GOLDBOT_TEMPLATES, null, 2),
+            },
+            {
+              id: "throttleCapsJson",
+              label: "Throttle Caps JSON",
+              rows: 5,
+              initialValue: JSON.stringify(
+                settings.throttleCapsJson || DEFAULT_GOLDBOT_THROTTLE_CAPS,
+                null,
+                2,
+              ),
+            },
+          ]}
+        />
+      </SectionCard>
+    </GoldBotPageShell>
   );
 }

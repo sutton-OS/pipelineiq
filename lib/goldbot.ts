@@ -76,6 +76,7 @@ export type LeadDetail = {
   state: string;
   needsStaffAttention: boolean;
   invalidResponseCount: number;
+  staleAfterAt: string | null;
   flagsJson: Record<string, unknown>;
   createdAt: string;
   lastInboundAt: string | null;
@@ -97,6 +98,7 @@ export type AppointmentListItem = {
   startsAt: string;
   endsAt: string;
   status: string;
+  provider: string | null;
   notes: string | null;
   createdAt: string;
 };
@@ -582,6 +584,7 @@ export async function getLeadDetail(
     state: string;
     needs_staff_attention: boolean;
     invalid_response_count: number;
+    stale_after_at: string | null;
     flags_json: unknown;
     conversation_id: string | null;
   }>(
@@ -601,6 +604,7 @@ export async function getLeadDetail(
         COALESCE(c.state, 'awaiting_yes') AS state,
         COALESCE(c.needs_staff_attention, false) AS needs_staff_attention,
         COALESCE(c.invalid_response_count, 0) AS invalid_response_count,
+        c.stale_after_at,
         COALESCE(c.flags_json, '{}'::jsonb) AS flags_json,
         c.id AS conversation_id
       FROM leads l
@@ -656,6 +660,7 @@ export async function getLeadDetail(
           starts_at: string;
           ends_at: string;
           status: string;
+          provider: string | null;
           notes: string | null;
           created_at: string;
         }>(
@@ -665,6 +670,7 @@ export async function getLeadDetail(
               starts_at,
               ends_at,
               status,
+              provider,
               notes,
               created_at
             FROM appointments
@@ -689,6 +695,7 @@ export async function getLeadDetail(
     state: leadRow.state,
     needsStaffAttention: leadRow.needs_staff_attention,
     invalidResponseCount: leadRow.invalid_response_count,
+    staleAfterAt: leadRow.stale_after_at,
     flagsJson: asObject(leadRow.flags_json),
     createdAt: leadRow.created_at,
     lastInboundAt: leadRow.last_inbound_at,
@@ -711,6 +718,7 @@ export async function getLeadDetail(
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       status: row.status,
+      provider: row.provider,
       notes: row.notes,
       createdAt: row.created_at,
     })),
