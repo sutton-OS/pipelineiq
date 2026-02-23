@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 
 export const metadata: Metadata = {
-  title: "Dashboard",
+  title: "Operations",
 };
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

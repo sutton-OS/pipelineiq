@@ -17,6 +17,11 @@ export default function DashboardLayout({
         className="flex min-w-0 flex-1 flex-col"
         style={{ background: "var(--paper)", color: "var(--ink)" }}
       >
+        <header className="border-b border-border/70 px-6 py-3 md:px-8">
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-ink-2">
+            GoldBot
+          </p>
+        </header>
         <main className="flex-1 p-6 md:p-8">{children}</main>
       </div>
     </div>

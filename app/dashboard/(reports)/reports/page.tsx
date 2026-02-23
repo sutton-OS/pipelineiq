@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { DeleteReportButton } from './delete-report-button';
 
 export const metadata: Metadata = {
-  title: "Reports",
+  title: "Library",
 };
 
 type ReportListItem = Pick<

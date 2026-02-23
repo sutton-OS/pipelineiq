@@ -7,7 +7,7 @@ import { createServerClient } from "@/lib/supabase";
 import type { Rep, RepMetrics, Report, Team } from "@/types/database";
 
 export const metadata: Metadata = {
-  title: "Report",
+  title: "Report Detail",
 };
 
 const avatarPalette = [

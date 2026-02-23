@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const metadata: Metadata = {
-  title: "Automation Settings",
+  title: "Automation",
 };
 
 async function submitKillSwitch(formData: FormData) {

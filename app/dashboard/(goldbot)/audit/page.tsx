@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 
 export const metadata: Metadata = {
-  title: "Audit Log",
+  title: "Audit",
 };
 
 function formatDate(value: string): string {

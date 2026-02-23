@@ -8,11 +8,10 @@ import {
   AlertTriangle,
   Bot,
   FileText,
-  Inbox,
   LayoutDashboard,
   ListChecks,
-  MessageSquareText,
   Menu,
+  Upload,
   Settings,
 } from "lucide-react";
 import {
@@ -30,16 +29,33 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/leads", label: "Leads", icon: ListChecks },
-  { href: "/dashboard/intake", label: "Lead Intake", icon: Inbox },
-  { href: "/dashboard/inbound-sim", label: "Inbound Sim", icon: MessageSquareText },
-  { href: "/dashboard/staff-queue", label: "Staff Queue", icon: AlertTriangle },
-  { href: "/dashboard/audit", label: "Audit Log", icon: ActivitySquare },
-  { href: "/dashboard/settings/automation", label: "Automation", icon: Bot },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
+const navSections: NavSection[] = [
+  {
+    title: "GoldBot",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/leads", label: "Leads", icon: ListChecks },
+      { href: "/dashboard/staff-queue", label: "Staff Queue", icon: AlertTriangle },
+      { href: "/dashboard/settings/automation", label: "Automation", icon: Bot },
+      { href: "/dashboard/audit", label: "Audit", icon: ActivitySquare },
+    ],
+  },
+  {
+    title: "Reports",
+    items: [
+      { href: "/dashboard/upload", label: "Upload", icon: Upload },
+      { href: "/dashboard/reports", label: "Reports", icon: FileText },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [{ href: "/dashboard/settings", label: "Billing & Settings", icon: Settings }],
+  },
 ];
 
 function isNavActive(pathname: string, href: string) {
@@ -55,36 +71,43 @@ function NavLinks({
   mobile?: boolean;
 }) {
   return (
-    <nav className="space-y-1">
-      {navItems.map((item) => {
-        const active = isNavActive(pathname, item.href);
-        const Icon = item.icon;
+    <nav className="space-y-4">
+      {navSections.map((section) => (
+        <div key={section.title} className="space-y-1">
+          <p className="px-3 text-[11px] uppercase tracking-[0.08em] text-[rgba(255,255,255,0.45)]">
+            {section.title}
+          </p>
+          {section.items.map((item) => {
+            const active = isNavActive(pathname, item.href);
+            const Icon = item.icon;
 
-        const link = (
-          <Link
-            href={item.href}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-[13px] transition-colors",
-              active
-                ? "bg-[rgba(255,255,255,0.08)] text-white"
-                : "text-[rgba(255,255,255,0.45)] hover:text-white"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            <span>{item.label}</span>
-          </Link>
-        );
+            const link = (
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-[13px] transition-colors",
+                  active
+                    ? "bg-[rgba(255,255,255,0.08)] text-white"
+                    : "text-[rgba(255,255,255,0.45)] hover:text-white"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </Link>
+            );
 
-        if (mobile) {
-          return (
-            <SheetClose asChild key={item.href}>
-              {link}
-            </SheetClose>
-          );
-        }
+            if (mobile) {
+              return (
+                <SheetClose asChild key={item.href}>
+                  {link}
+                </SheetClose>
+              );
+            }
 
-        return <div key={item.href}>{link}</div>;
-      })}
+            return <div key={item.href}>{link}</div>;
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
@@ -107,6 +130,9 @@ function SidebarContent({ pathname }: { pathname: string }) {
             IQ
           </span>
         </div>
+        <p className="mt-2 text-[11px] uppercase tracking-[0.08em] text-[rgba(255,255,255,0.45)]">
+          GoldBot
+        </p>
       </div>
 
       <div className="flex-1 px-3 py-4">
@@ -165,6 +191,9 @@ export function SidebarNav() {
                     IQ
                   </span>
                 </div>
+                <p className="mt-2 text-[11px] uppercase tracking-[0.08em] text-[rgba(255,255,255,0.45)]">
+                  GoldBot
+                </p>
               </div>
 
               <div className="flex-1 px-3 py-4">

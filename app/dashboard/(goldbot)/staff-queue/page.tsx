@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 
 export const metadata: Metadata = {
-  title: "Needs Staff Attention",
+  title: "Staff Queue",
 };
 
 function formatDate(value: string): string {

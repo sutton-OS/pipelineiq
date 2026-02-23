@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { UploadFlow } from "@/components/upload-flow"
 
 export const metadata: Metadata = {
-  title: "Upload Data",
+  title: "Upload",
 };
 
 export default function UploadPage() {
