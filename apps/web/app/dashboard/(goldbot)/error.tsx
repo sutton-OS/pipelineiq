@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { getMissingEnvKeysFromError } from "@/lib/env-error";
 
 type GoldBotErrorProps = {
@@ -10,16 +10,19 @@ type GoldBotErrorProps = {
 
 export default function GoldBotError({ error, reset }: GoldBotErrorProps) {
   const missingKeys = getMissingEnvKeysFromError(error.message ?? "");
+  const referenceId = useMemo(
+    () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    [error],
+  );
 
   useEffect(() => {
-    const referenceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     console.error("[dashboard_error]", {
       group: "goldbot",
       referenceId,
       message: error.message,
       stack: error.stack,
     });
-  }, [error]);
+  }, [error, referenceId]);
 
   return (
     <main className="grid min-h-[60vh] place-items-center px-6 py-10">
@@ -28,6 +31,9 @@ export default function GoldBotError({ error, reset }: GoldBotErrorProps) {
         <h1 className="mt-3 font-serif text-3xl leading-tight">GoldBot dashboard error</h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-2">
           This dashboard view failed to load. Retry to request fresh data.
+        </p>
+        <p className="mt-2 font-mono text-xs text-ink-2">
+          Reference ID: <span className="text-ink">{referenceId}</span>
         </p>
 
         {missingKeys.length > 0 ? (

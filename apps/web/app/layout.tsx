@@ -25,6 +25,11 @@ const instrumentSerif = Instrument_Serif({
 
 requireStartupEnv();
 
+const signInFallbackRedirectUrl =
+  process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ?? "/dashboard";
+const signUpFallbackRedirectUrl =
+  process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL ?? "/dashboard";
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "https://pipelineiq.app"
@@ -72,7 +77,10 @@ export default function RootLayout({
       className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
     >
       <body className="min-h-screen bg-background font-sans antialiased">
-        <ClerkProvider>
+        <ClerkProvider
+          signInFallbackRedirectUrl={signInFallbackRedirectUrl}
+          signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
+        >
           {children}
         </ClerkProvider>
         <Toaster position="top-right" richColors />

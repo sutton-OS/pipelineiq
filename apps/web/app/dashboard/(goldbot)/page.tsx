@@ -6,6 +6,7 @@ import {
   getDashboardSummary,
   listLeadsForLocation,
 } from "@/lib/goldbot";
+import { logServerError } from "@/lib/server-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/goldbot/empty-state";
@@ -88,31 +89,32 @@ function resolveKillSwitchState(
 }
 
 export default async function DashboardPage() {
-  const userId = await requireUserId();
-  const context = await ensureOrgAndLocation(userId);
+  try {
+    const userId = await requireUserId();
+    const context = await ensureOrgAndLocation(userId);
 
-  const [summary, leads] = await Promise.all([
-    getDashboardSummary(context),
-    listLeadsForLocation(context),
-  ]);
+    const [summary, leads] = await Promise.all([
+      getDashboardSummary(context),
+      listLeadsForLocation(context),
+    ]);
 
-  const recentLeads = leads.slice(0, 8);
-  const heatByKey = new Map<string, number>(
-    summary.outboundHeatmap.map((cell) => [`${cell.dow}-${cell.hour}`, cell.count]),
-  );
-  const maxHeatValue = summary.outboundHeatmap.reduce(
-    (max, cell) => Math.max(max, cell.count),
-    0,
-  );
-  const killSwitchState = resolveKillSwitchState(context);
-  const subtitleItems = [
-    context.locationName,
-    `TZ ${context.timezone}`,
-    `Autonomy ${formatLabel(context.autonomyMode)}`,
-    `Booking ${formatLabel(context.bookingProvider)}`,
-  ];
+    const recentLeads = leads.slice(0, 8);
+    const heatByKey = new Map<string, number>(
+      summary.outboundHeatmap.map((cell) => [`${cell.dow}-${cell.hour}`, cell.count]),
+    );
+    const maxHeatValue = summary.outboundHeatmap.reduce(
+      (max, cell) => Math.max(max, cell.count),
+      0,
+    );
+    const killSwitchState = resolveKillSwitchState(context);
+    const subtitleItems = [
+      context.locationName,
+      `TZ ${context.timezone}`,
+      `Autonomy ${formatLabel(context.autonomyMode)}`,
+      `Booking ${formatLabel(context.bookingProvider)}`,
+    ];
 
-  return (
+    return (
     <GoldBotPageShell
       title="GoldBot Operations"
       subtitle={
@@ -457,5 +459,9 @@ export default async function DashboardPage() {
         </SectionCard>
       </section>
     </GoldBotPageShell>
-  );
+    );
+  } catch (error) {
+    logServerError("app/dashboard/(goldbot)/page", error);
+    throw error;
+  }
 }

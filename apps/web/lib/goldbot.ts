@@ -1,5 +1,6 @@
 import { pgPool } from "@/lib/pg";
 import { requireAuthContext, type AppRole } from "@/lib/auth";
+import { logServerError } from "@/lib/server-error";
 
 export const DEFAULT_GOLDBOT_BUSINESS_HOURS = {
   mon: [{ start: "09:00", end: "17:00" }],
@@ -506,7 +507,16 @@ export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationC
       bookingProvider: toBookingProvider(location.booking_provider),
     };
   } catch (error) {
-    await client.query("ROLLBACK");
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      logServerError("lib/goldbot.ensureOrgAndLocation.rollback", rollbackError, { userId });
+    }
+
+    logServerError("lib/goldbot.ensureOrgAndLocation", error, {
+      userId,
+      clerkOrgId: requestScope.clerkOrgId,
+    });
     throw error;
   } finally {
     client.release();
@@ -1514,16 +1524,17 @@ export async function listAuditEntriesForExport(
 }
 
 export async function getDashboardSummary(context: OrgLocationContext): Promise<DashboardSummary> {
-  const [
-    countsResult,
-    jobCountsResult,
-    outboundResult,
-    optOutCountResult,
-    recentMessagesResult,
-    sendFailuresResult,
-    optOutEventsResult,
-    heatmapResult,
-  ] = await Promise.all([
+  try {
+    const [
+      countsResult,
+      jobCountsResult,
+      outboundResult,
+      optOutCountResult,
+      recentMessagesResult,
+      sendFailuresResult,
+      optOutEventsResult,
+      heatmapResult,
+    ] = await Promise.all([
     pgPool.query<{
       total_leads: string;
       booked_conversations: string;
@@ -1671,47 +1682,54 @@ export async function getDashboardSummary(context: OrgLocationContext): Promise<
       `,
       [context.orgId, context.locationId],
     ),
-  ]);
+    ]);
 
-  const counts = countsResult.rows[0];
-  const jobs = jobCountsResult.rows[0];
-  const outbound = outboundResult.rows[0];
-  const optOutCount = optOutCountResult.rows[0];
+    const counts = countsResult.rows[0];
+    const jobs = jobCountsResult.rows[0];
+    const outbound = outboundResult.rows[0];
+    const optOutCount = optOutCountResult.rows[0];
 
-  return {
-    totalLeads: Number(counts?.total_leads ?? "0"),
-    bookedConversations: Number(counts?.booked_conversations ?? "0"),
-    awaitingYes: Number(counts?.awaiting_yes ?? "0"),
-    awaitingTimeChoice: Number(counts?.awaiting_time_choice ?? "0"),
-    staffAttention: Number(counts?.staff_attention ?? "0"),
-    deadJobs: Number(jobs?.dead_jobs ?? "0"),
-    queuedJobs: Number(jobs?.queued_jobs ?? "0"),
-    runningJobs: Number(jobs?.running_jobs ?? "0"),
-    outboundLast24h: Number(outbound?.outbound_last_24h ?? "0"),
-    optOutEventsLast7d: Number(optOutCount?.opt_out_events_last_7d ?? "0"),
-    recentMessages: recentMessagesResult.rows.map((row) => ({
-      id: row.id,
-      leadName: row.lead_name,
-      direction: row.direction,
-      status: row.status,
-      body: row.body,
-      createdAt: row.created_at,
-    })),
-    recentSendFailures: sendFailuresResult.rows.map((row) => ({
-      id: row.id,
-      leadName: row.lead_name,
-      errorMessage: row.error_message,
-      createdAt: row.created_at,
-    })),
-    recentOptOutEvents: optOutEventsResult.rows.map((row) => ({
-      leadId: row.lead_id,
-      leadName: row.lead_name,
-      optedOutAt: row.opted_out_at,
-    })),
-    outboundHeatmap: heatmapResult.rows.map((row) => ({
-      dow: Number(row.dow),
-      hour: Number(row.hour),
-      count: Number(row.count),
-    })),
-  };
+    return {
+      totalLeads: Number(counts?.total_leads ?? "0"),
+      bookedConversations: Number(counts?.booked_conversations ?? "0"),
+      awaitingYes: Number(counts?.awaiting_yes ?? "0"),
+      awaitingTimeChoice: Number(counts?.awaiting_time_choice ?? "0"),
+      staffAttention: Number(counts?.staff_attention ?? "0"),
+      deadJobs: Number(jobs?.dead_jobs ?? "0"),
+      queuedJobs: Number(jobs?.queued_jobs ?? "0"),
+      runningJobs: Number(jobs?.running_jobs ?? "0"),
+      outboundLast24h: Number(outbound?.outbound_last_24h ?? "0"),
+      optOutEventsLast7d: Number(optOutCount?.opt_out_events_last_7d ?? "0"),
+      recentMessages: recentMessagesResult.rows.map((row) => ({
+        id: row.id,
+        leadName: row.lead_name,
+        direction: row.direction,
+        status: row.status,
+        body: row.body,
+        createdAt: row.created_at,
+      })),
+      recentSendFailures: sendFailuresResult.rows.map((row) => ({
+        id: row.id,
+        leadName: row.lead_name,
+        errorMessage: row.error_message,
+        createdAt: row.created_at,
+      })),
+      recentOptOutEvents: optOutEventsResult.rows.map((row) => ({
+        leadId: row.lead_id,
+        leadName: row.lead_name,
+        optedOutAt: row.opted_out_at,
+      })),
+      outboundHeatmap: heatmapResult.rows.map((row) => ({
+        dow: Number(row.dow),
+        hour: Number(row.hour),
+        count: Number(row.count),
+      })),
+    };
+  } catch (error) {
+    logServerError("lib/goldbot.getDashboardSummary", error, {
+      orgId: context.orgId,
+      locationId: context.locationId,
+    });
+    throw error;
+  }
 }

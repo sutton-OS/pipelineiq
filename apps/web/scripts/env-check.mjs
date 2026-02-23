@@ -40,4 +40,36 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+if (process.env.NODE_ENV === "production") {
+  const publishableKey = parsed.data.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const secretKey = parsed.data.CLERK_SECRET_KEY;
+
+  if (!secretKey.startsWith("sk_live_")) {
+    console.error(
+      "[env_invalid] scope=env.check key=CLERK_SECRET_KEY expected_prefix=sk_live_",
+    );
+    console.error(
+      "Production requires a live Clerk secret key (CLERK_SECRET_KEY must start with sk_live_).",
+    );
+    process.exit(1);
+  }
+
+  if (publishableKey.startsWith("pk_test_")) {
+    console.warn(
+      "[env_warn] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY prefix=pk_test_ expected=pk_live_",
+    );
+    console.warn(
+      "Production is using a Clerk test publishable key (pk_test_). Use pk_live_ when ready.",
+    );
+  } else if (!publishableKey.startsWith("pk_live_")) {
+    console.error(
+      "[env_invalid] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY expected_prefix=pk_live_",
+    );
+    console.error(
+      "Production requires a Clerk publishable key prefixed with pk_live_ (pk_test_ is warning-only).",
+    );
+    process.exit(1);
+  }
+}
+
 console.log(`[env_ok] scope=env.check keys=${requiredKeys.length}`);

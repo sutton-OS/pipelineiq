@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { requireEnv } from "@/lib/env";
+import { logServerError } from "@/lib/server-error";
 
 export type AppRole = "owner" | "staff";
 
@@ -62,6 +63,11 @@ export async function requireAuthContext(): Promise<AuthContext> {
 }
 
 export async function requireUserId(): Promise<string> {
-  const authContext = await requireAuthContext();
-  return authContext.userId;
+  try {
+    const authContext = await requireAuthContext();
+    return authContext.userId;
+  } catch (error) {
+    logServerError("lib/auth.requireUserId", error);
+    throw error;
+  }
 }
