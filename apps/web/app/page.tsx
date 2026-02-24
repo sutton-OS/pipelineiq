@@ -1377,10 +1377,6 @@ export default function HomePage() {
           color: rgba(255, 255, 255, 0.65) !important;
         }
 
-        .demo-uploader-wrap > section .theme-toggle-btn {
-          display: none !important;
-        }
-
         .pricing {
           padding: 120px 48px;
           background: var(--surface);

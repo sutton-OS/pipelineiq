@@ -550,9 +550,10 @@ export function ReportUploader() {
   const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
     try {
-      return localStorage.getItem("piq-dark") === "true";
+      const savedPreference = localStorage.getItem("piq-dark");
+      return savedPreference === null ? true : savedPreference === "true";
     } catch {
-      return false;
+      return true;
     }
   });
 
