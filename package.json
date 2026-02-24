@@ -19,7 +19,7 @@
     "ci": "npm run lint && npm run typecheck && npm run worker:typecheck && npm run worker:test"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.38.0",
+    "@clerk/nextjs": "^6.38.2",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-progress": "^1.1.7",

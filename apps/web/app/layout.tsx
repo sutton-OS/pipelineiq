@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
+import {
+  ClerkProvider,
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@clerk/nextjs";
 import { DM_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
 import { Toaster } from "sonner";
 import { requireStartupEnv } from "@/lib/env";
@@ -81,6 +88,18 @@ export default function RootLayout({
           signInFallbackRedirectUrl={signInFallbackRedirectUrl}
           signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
         >
+          <header className="sticky top-0 z-10 flex items-center justify-between gap-6 border-b border-border/50 bg-background/90 px-6 py-4 text-sm font-semibold text-foreground backdrop-blur">
+            <span>PipelineIQ</span>
+            <div className="flex items-center gap-2">
+              <SignedOut>
+                <SignInButton mode="modal">Sign in</SignInButton>
+                <SignUpButton mode="modal">Sign up</SignUpButton>
+              </SignedOut>
+              <SignedIn>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
+            </div>
+          </header>
           {children}
         </ClerkProvider>
         <Toaster position="top-right" richColors />
