@@ -24,6 +24,9 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(scriptDir, "..");
 loadEnvConfig(webDir, process.env.NODE_ENV !== "production");
 
+// Allow bypassing the live-key enforcement in CI by setting ALLOW_TEST_KEYS=true
+const allowTestKeys = /^(1|true)$/i.test(String(process.env.ALLOW_TEST_KEYS || ""));
+
 const scopedInput = Object.fromEntries(requiredKeys.map((key) => [key, process.env[key]]));
 const parsed = envSchema.safeParse(scopedInput);
 
@@ -44,31 +47,37 @@ if (process.env.NODE_ENV === "production") {
   const publishableKey = parsed.data.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const secretKey = parsed.data.CLERK_SECRET_KEY;
 
-  if (!secretKey.startsWith("sk_live_")) {
-    console.error(
-      "[env_invalid] scope=env.check key=CLERK_SECRET_KEY expected_prefix=sk_live_",
+  if (allowTestKeys) {
+    console.warn(
+      "[env_relaxed] scope=env.check ALLOW_TEST_KEYS=true skipping live-key enforcement (tests keys allowed)",
     );
-    console.error(
-      "Production requires a live Clerk secret key (CLERK_SECRET_KEY must start with sk_live_).",
-    );
-    process.exit(1);
-  }
+  } else {
+    if (!secretKey.startsWith("sk_live_")) {
+      console.error(
+        "[env_invalid] scope=env.check key=CLERK_SECRET_KEY expected_prefix=sk_live_",
+      );
+      console.error(
+        "Production requires a live Clerk secret key (CLERK_SECRET_KEY must start with sk_live_).",
+      );
+      process.exit(1);
+    }
 
-  if (publishableKey.startsWith("pk_test_")) {
-    console.warn(
-      "[env_warn] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY prefix=pk_test_ expected=pk_live_",
-    );
-    console.warn(
-      "Production is using a Clerk test publishable key (pk_test_). Use pk_live_ when ready.",
-    );
-  } else if (!publishableKey.startsWith("pk_live_")) {
-    console.error(
-      "[env_invalid] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY expected_prefix=pk_live_",
-    );
-    console.error(
-      "Production requires a Clerk publishable key prefixed with pk_live_ (pk_test_ is warning-only).",
-    );
-    process.exit(1);
+    if (publishableKey.startsWith("pk_test_")) {
+      console.warn(
+        "[env_warn] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY prefix=pk_test_ expected=pk_live_",
+      );
+      console.warn(
+        "Production is using a Clerk test publishable key (pk_test_). Use pk_live_ when ready.",
+      );
+    } else if (!publishableKey.startsWith("pk_live_")) {
+      console.error(
+        "[env_invalid] scope=env.check key=NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY expected_prefix=pk_live_",
+      );
+      console.error(
+        "Production requires a Clerk publishable key prefixed with pk_live_ (pk_test_ is warning-only).",
+      );
+      process.exit(1);
+    }
   }
 }
 
