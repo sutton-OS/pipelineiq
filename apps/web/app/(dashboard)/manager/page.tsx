@@ -6,5 +6,9 @@ export const metadata: Metadata = {
 };
 
 export default function ManagerPage() {
-  return <RepRoster />;
+  return (
+    <main>
+      <RepRoster />
+    </main>
+  );
 }

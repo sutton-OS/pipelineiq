@@ -1,48 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { Syne } from "next/font/google";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-} from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { repsStore, type Rep } from "@/lib/reps-store";
 import { fetchAndParseSheet, getRepStats, parseStoredRepData } from "@/lib/rep-sync";
-
-const syne = Syne({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
 
 const YEAR_OPTIONS = [2025, 2026] as const;
 
 type SortOption = "commission" | "units" | "fpRate" | "name" | "lastSynced";
 type RosterView = "team" | "all";
+type RepStatusTone = "strong" | "average" | "behind";
 
 type RepCardData = Rep & {
   teamLabel: string;
   syncedAt: number;
   stats: ReturnType<typeof getRepStats>;
 };
-
-const shellVars = {
-  "--bg": "var(--paper)",
-  "--surface": "var(--paper-2)",
-  "--surface-2": "var(--paper-3)",
-  "--border": "var(--border)",
-  "--ink": "var(--ink)",
-  "--ink-2": "var(--ink-2)",
-  "--ink-3": "var(--ink-3)",
-} as CSSProperties;
-
-const cardHoverTransition = {
-  transition: "all 0.15s ease",
-} as CSSProperties;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -63,11 +37,16 @@ function formatPercent(value: number) {
 }
 
 function formatSyncedTime(value: string) {
-  if (!value) return "Last synced never";
+  if (!value) return "synced never";
   const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return "Last synced never";
+  if (Number.isNaN(timestamp)) return "synced never";
   const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-  return `Last synced ${minutesAgo} min ago`;
+  if (minutesAgo < 1) return "synced just now";
+  if (minutesAgo < 60) return `synced ${minutesAgo}m ago`;
+  const hours = Math.floor(minutesAgo / 60);
+  if (hours < 24) return `synced ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `synced ${days}d ago`;
 }
 
 function buildRepId() {
@@ -75,6 +54,28 @@ function buildRepId() {
     return crypto.randomUUID();
   }
   return `rep-${Date.now()}`;
+}
+
+function getRepStatusTone(fpRate: number): RepStatusTone {
+  if (fpRate >= 30) return "strong";
+  if (fpRate >= 25) return "average";
+  return "behind";
+}
+
+function getRepStatusLabel(tone: RepStatusTone) {
+  if (tone === "strong") return "Strong";
+  if (tone === "average") return "Average";
+  return "Behind";
+}
+
+function getRepStatusClass(tone: RepStatusTone) {
+  if (tone === "strong") return "status-strong";
+  if (tone === "average") return "status-average";
+  return "status-behind";
+}
+
+function formatRank(index: number) {
+  return String(index + 1).padStart(2, "0");
 }
 
 export function RepRoster() {
@@ -188,6 +189,34 @@ export function RepRoster() {
       .sort((a, b) => a.team.localeCompare(b.team));
   }, [sortedReps]);
 
+  const totalTeamCommission = useMemo(
+    () => sortedReps.reduce((sum, rep) => sum + rep.stats.commission, 0),
+    [sortedReps]
+  );
+
+  const totalUnits = useMemo(
+    () => sortedReps.reduce((sum, rep) => sum + rep.stats.units, 0),
+    [sortedReps]
+  );
+
+  const averageTeamFpRate = useMemo(() => {
+    if (sortedReps.length === 0) return 0;
+    return sortedReps.reduce((sum, rep) => sum + rep.stats.fpRate, 0) / sortedReps.length;
+  }, [sortedReps]);
+
+  const totalMissedCommission = useMemo(
+    () => sortedReps.reduce((sum, rep) => sum + rep.stats.missedFpCommission, 0),
+    [sortedReps]
+  );
+
+  const rankByRepId = useMemo(() => {
+    const ranks = new Map<string, number>();
+    sortedReps.forEach((rep, index) => {
+      ranks.set(rep.id, index);
+    });
+    return ranks;
+  }, [sortedReps]);
+
   function resetForm() {
     setRepName("");
     setTeamName("");
@@ -268,319 +297,106 @@ export function RepRoster() {
 
   function renderRepCard(rep: RepCardData) {
     const isSyncing = syncingRepId === rep.id;
+    const rank = rankByRepId.get(rep.id) ?? 0;
+    const statusTone = getRepStatusTone(rep.stats.fpRate);
+    const statusClass = getRepStatusClass(statusTone);
     const commissionBarPercent =
       highestCommission > 0 ? Math.min((rep.stats.commission / highestCommission) * 100, 100) : 0;
 
     return (
-      <article
-        key={rep.id}
-        style={cardHoverTransition}
-        className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-7 py-6 hover:bg-[var(--surface-2)]"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <h3 className={`${syne.className} text-[15px] font-bold text-[var(--ink)]`}>
-            {rep.name}
-          </h3>
-          <span
-            className="inline-flex rounded-[99px] border border-[var(--border)] bg-[var(--surface-2)] px-[10px] py-[3px] text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
-            {rep.teamLabel}
-          </span>
+      <div key={rep.id} className="rep-card">
+        <div className="rep-card-top">
+          <div>
+            <div className="rep-card-name">{rep.name}</div>
+            <div className="rep-card-badges">
+              <span className="rep-team-badge">{rep.teamLabel}</span>
+              <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
+            </div>
+          </div>
+          <div className="rep-rank">{formatRank(rank)}</div>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-5">
-          <div>
-            <p
-              className="text-[26px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              {formatCurrency(rep.stats.commission)}
-            </p>
-            <p
-              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              Commission
-            </p>
+        <div className="rep-stats">
+          <div className="rep-stat-item">
+            <div className="rep-stat-value">{formatCurrency(rep.stats.commission)}</div>
+            <div className="rep-stat-label">Commission</div>
           </div>
-          <div>
-            <p
-              className="text-[26px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              {formatUnits(rep.stats.units)}
-            </p>
-            <p
-              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              Units
-            </p>
+          <div className="rep-stat-item">
+            <div className="rep-stat-value">{formatUnits(rep.stats.fpSold)}</div>
+            <div className="rep-stat-label">FPs Sold</div>
           </div>
-          <div>
-            <p
-              className="text-[26px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              {formatPercent(rep.stats.fpRate)}
-            </p>
-            <p
-              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              FP Rate
-            </p>
+          <div className="rep-stat-item">
+            <div className="rep-stat-value">{formatPercent(rep.stats.fpRate)}</div>
+            <div className="rep-stat-label">FP Rate</div>
           </div>
         </div>
 
-        <div className="my-4 h-1 overflow-hidden rounded-[99px] bg-[var(--border)]">
-          <div
-            className="h-full rounded-[99px] bg-[var(--accent)]"
-            style={{ width: `${commissionBarPercent}%` }}
-          />
+        <div className="commission-bar-wrap">
+          <div className="commission-bar-track">
+            <div
+              className="commission-bar-fill"
+              style={{
+                width: `${commissionBarPercent}%`,
+                background: statusTone === "behind" ? "var(--red)" : "var(--accent)",
+              }}
+            />
+          </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/manager/${rep.id}`}
-              className={`${syne.className} inline-flex items-center rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] hover:bg-[var(--surface)]`}
-            >
+        <div className="rep-card-footer">
+          <div className="rep-card-actions">
+            <Link href={`/manager/${rep.id}`} className="btn-sm primary">
               View Report
             </Link>
             <button
               type="button"
               onClick={() => void handleSync(rep)}
               disabled={isSyncing}
-              className={`${syne.className} inline-flex items-center gap-1.5 rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60`}
+              className="btn-sm"
             >
-              {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Sync
+              {isSyncing ? "Syncing..." : "Sync"}
             </button>
           </div>
-          <p
-            className="text-[10px] text-[var(--ink-3)]"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
-            {formatSyncedTime(rep.lastSynced)}
-          </p>
+          <span className="rep-synced">{formatSyncedTime(rep.lastSynced)}</span>
         </div>
-      </article>
+      </div>
     );
   }
 
   return (
-    <div
-      style={shellVars}
-      className="min-h-[calc(100vh-65px)] bg-[var(--bg)] px-5 py-8 text-[var(--ink)] md:px-8"
-    >
-      <div className="mx-auto max-w-[1180px]">
-        <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p
-              className="mb-2 text-[10px] uppercase tracking-[0.15em] text-[var(--ink-3)]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              MANAGER VIEW
-            </p>
-            <h1
-              className="text-[48px] leading-[1] text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)", letterSpacing: "-1.5px" }}
-            >
-              Team Dashboard
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1 rounded-[6px] bg-transparent">
-              {YEAR_OPTIONS.map((year) => {
-                const isActive = selectedYear === year;
-                return (
-                  <button
-                    key={year}
-                    type="button"
-                    onClick={() => setSelectedYear(year)}
-                    className="rounded-[6px] px-[14px] py-[6px] text-[12px] [transition:all_0.15s_ease]"
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      background: isActive ? "var(--ink)" : "var(--surface-2)",
-                      color: isActive ? "#ffffff" : "var(--ink-3)",
-                    }}
-                  >
-                    {year}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={openAddDialog}
-              className={`${syne.className} rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-90`}
-            >
-              Add Rep
-            </button>
-          </div>
-        </header>
-
-        <section className="mb-7 border-b border-[var(--border)]">
-          <div className="flex items-end justify-between gap-4">
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => setViewMode("team")}
-                className={`${syne.className} px-4 py-[10px] text-[13px] [transition:all_0.15s_ease] ${
-                  viewMode === "team"
-                    ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
-                    : "border-b-2 border-transparent text-[var(--ink-3)]"
-                }`}
-              >
-                By Team
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("all")}
-                className={`${syne.className} px-4 py-[10px] text-[13px] [transition:all_0.15s_ease] ${
-                  viewMode === "all"
-                    ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
-                    : "border-b-2 border-transparent text-[var(--ink-3)]"
-                }`}
-              >
-                All Reps
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="sort-reps"
-                className="text-[10px] uppercase tracking-[0.12em] text-[var(--ink-3)]"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
-                SORT
-              </label>
-              <select
-                id="sort-reps"
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as SortOption)}
-                className={`${syne.className} rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] focus:border-[var(--accent)] focus:outline-none`}
-              >
-                <option value="commission">Most commission</option>
-                <option value="units">Most units</option>
-                <option value="fpRate">Best FP rate</option>
-                <option value="name">Name A-Z</option>
-                <option value="lastSynced">Last synced</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        {sortedReps.length === 0 ? (
-          <div className="rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] px-8 py-20 text-center">
-            <p
-              className="text-[56px] leading-none text-[var(--ink-3)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              +
-            </p>
-            <p
-              className="mt-4 text-[28px] text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              No reps yet
-            </p>
-            <p className={`${syne.className} mx-auto mt-3 max-w-[460px] text-[13px] font-normal text-[var(--ink-3)]`}>
-              Add your first rep and sync a Google Sheet to populate the roster.
-            </p>
-            <button
-              type="button"
-              onClick={openAddDialog}
-              className={`${syne.className} mt-6 rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-90`}
-            >
-              Add your first rep &rarr;
-            </button>
-          </div>
-        ) : viewMode === "all" ? (
-          <div className="grid gap-4 lg:grid-cols-2">{sortedReps.map(renderRepCard)}</div>
-        ) : (
-          <div className="space-y-4">
-            {groupedByTeam.map((group) => (
-              <section key={group.team}>
-                <div className="mb-4 flex items-center gap-4">
-                  <div className="flex shrink-0 items-center gap-3">
-                    <h2
-                      className={`${syne.className} text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-3)]`}
-                    >
-                      {group.team}
-                    </h2>
-                    <p
-                      className="text-[11px] text-[var(--ink-3)]"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
-                      {group.members.length} reps &middot; {formatCurrency(group.teamCommission)} total &middot;{" "}
-                      {formatPercent(group.averageFpRate)} avg FP
-                    </p>
-                  </div>
-                  <div className="h-px flex-1 bg-[var(--border)]" />
-                </div>
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {group.members.map(renderRepCard)}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-
+    <div className="manager-dashboard">
       {dialogOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.75)] p-5"
-          onClick={closeAddDialog}
-        >
-          <div
-            className="w-full max-w-[480px] rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-10"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2
-              className="text-[32px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              Add Rep
-            </h2>
-
-            <form className="mt-6 space-y-4" onSubmit={handleSaveAndSync}>
-              <div>
-                <label
-                  htmlFor="rep-name"
-                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
-                  Rep name
+        <div className="modal-overlay" onClick={closeAddDialog}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" onClick={closeAddDialog}>
+              ✕
+            </button>
+            <div className="modal-title">Add Rep</div>
+            <form onSubmit={handleSaveAndSync}>
+              <div className="form-group">
+                <label htmlFor="rep-name" className="form-label">
+                  Rep Name
                 </label>
                 <input
                   id="rep-name"
+                  className="form-input"
+                  placeholder="e.g. Tyler Williams"
                   value={repName}
                   onChange={(event) => setRepName(event.target.value)}
-                  placeholder="Tyler Sutton"
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
               </div>
 
-              <div>
-                <label
-                  htmlFor="rep-team"
-                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
+              <div className="form-group">
+                <label htmlFor="rep-team" className="form-label">
                   Team
                 </label>
                 <input
                   id="rep-team"
                   list="rep-team-options"
+                  className="form-input"
+                  placeholder="e.g. Morning Team"
                   value={teamName}
                   onChange={(event) => setTeamName(event.target.value)}
-                  placeholder="North"
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
                 <datalist id="rep-team-options">
                   {teams.map((team) => (
@@ -589,59 +405,985 @@ export function RepRoster() {
                 </datalist>
               </div>
 
-              <div>
-                <label
-                  htmlFor="sheet-url"
-                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
+              <div className="form-group">
+                <label htmlFor="sheet-url" className="form-label">
                   Google Sheets URL
                 </label>
                 <input
                   id="sheet-url"
+                  className="form-input"
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
                   value={sheetUrl}
                   onChange={(event) => setSheetUrl(event.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
-                <p
-                  className="mt-2 text-[10px] text-[var(--ink-3)]"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
-                  Make sure the sheet is set to &apos;Anyone with link can view&apos;
-                </p>
+                <div className="form-hint">Sheet must be set to &quot;Anyone with link can view&quot;</div>
               </div>
 
               {formError ? (
-                <p className={`${syne.className} rounded-[6px] border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-200`}>
+                <div className="form-hint" style={{ color: "var(--red)", marginBottom: "14px" }}>
                   {formError}
-                </p>
+                </div>
               ) : null}
 
-              <button
-                type="submit"
-                disabled={isSaving}
-                className={`${syne.className} mt-1 flex w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 py-[14px] text-[14px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {isSaving ? (
-                  <span className="animate-pulse">Syncing...</span>
-                ) : (
-                  "Save & Sync"
-                )}
+              <button className="modal-submit" type="submit" disabled={isSaving}>
+                {isSaving ? "Syncing..." : "Save & Sync"}
               </button>
-
-              <button
-                type="button"
-                onClick={closeAddDialog}
-                className="mt-1 block w-full cursor-pointer text-center text-[11px] text-[var(--ink-3)] [transition:all_0.15s_ease] hover:text-[var(--ink-2)]"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
+              <button className="modal-cancel" type="button" onClick={closeAddDialog}>
                 Cancel
               </button>
             </form>
           </div>
         </div>
       ) : null}
+
+      <div className="page">
+        <div className="page-header">
+          <div className="page-header-left">
+            <div className="page-eyebrow">Manager View</div>
+            <div className="page-title">Team Dashboard</div>
+          </div>
+          <div className="page-header-right">
+            <div className="year-toggle">
+              {YEAR_OPTIONS.map((year) => {
+                const isActive = year === selectedYear;
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    className={`year-btn ${isActive ? "active" : "inactive"}`}
+                    onClick={() => setSelectedYear(year)}
+                  >
+                    {year}
+                  </button>
+                );
+              })}
+            </div>
+            <button className="add-rep-btn" type="button" onClick={openAddDialog}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Rep
+            </button>
+          </div>
+        </div>
+
+        <div className="summary-bar">
+          <div className="summary-stat">
+            <div className="summary-stat-label">Total Team Commission</div>
+            <div className="summary-stat-value">{formatCurrency(totalTeamCommission)}</div>
+            <div className="summary-stat-sub">across all reps · {selectedYear}</div>
+          </div>
+          <div className="summary-stat">
+            <div className="summary-stat-label">Total Units</div>
+            <div className="summary-stat-value">{formatUnits(totalUnits)}</div>
+            <div className="summary-stat-sub">members sold</div>
+          </div>
+          <div className="summary-stat">
+            <div className="summary-stat-label">Avg FP Rate</div>
+            <div className="summary-stat-value">{formatPercent(averageTeamFpRate)}</div>
+            <div className="summary-stat-sub">across {sortedReps.length} reps</div>
+          </div>
+          <div className="summary-stat">
+            <div className="summary-stat-label">Missed FP Commission</div>
+            <div className="summary-stat-value" style={{ color: "var(--amber)" }}>
+              {formatCurrency(totalMissedCommission)}
+            </div>
+            <div className="summary-stat-sub">team-wide opportunity</div>
+          </div>
+        </div>
+
+        <div className="toolbar">
+          <div className="tabs">
+            <button
+              type="button"
+              className={`tab ${viewMode === "team" ? "active" : "inactive"}`}
+              onClick={() => setViewMode("team")}
+            >
+              By Team
+            </button>
+            <button
+              type="button"
+              className={`tab ${viewMode === "all" ? "active" : "inactive"}`}
+              onClick={() => setViewMode("all")}
+            >
+              All Reps
+            </button>
+          </div>
+          <div className="toolbar-right">
+            <span className="sort-label">Sort</span>
+            <select
+              className="sort-select"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as SortOption)}
+            >
+              <option value="commission">Most commission</option>
+              <option value="units">Most units</option>
+              <option value="fpRate">Best FP rate</option>
+              <option value="name">Name A-Z</option>
+              <option value="lastSynced">Last synced</option>
+            </select>
+          </div>
+        </div>
+
+        {sortedReps.length === 0 ? (
+          <div className="team-section">
+            <div className="rep-card" style={{ cursor: "default" }}>
+              <div className="rep-card-name">No reps yet</div>
+              <p className="rep-synced" style={{ marginTop: "8px" }}>
+                Add your first rep and sync a Google Sheet to populate the dashboard.
+              </p>
+              <div className="rep-card-actions" style={{ marginTop: "16px" }}>
+                <button type="button" className="btn-sm primary" onClick={openAddDialog}>
+                  Add Rep
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : viewMode === "all" ? (
+          <div className="team-section">
+            <div className="reps-grid">{sortedReps.map(renderRepCard)}</div>
+          </div>
+        ) : (
+          groupedByTeam.map((group) => (
+            <div className="team-section" key={group.team}>
+              <div className="team-header">
+                <span className="team-name">{group.team}</span>
+                <span className="team-meta">{group.members.length} reps</span>
+                <div className="team-divider" />
+                <span className="team-total-badge">
+                  {formatCurrency(group.teamCommission)} total · {formatPercent(group.averageFpRate)} avg FP
+                </span>
+              </div>
+              <div className="reps-grid">{group.members.map(renderRepCard)}</div>
+            </div>
+          ))
+        )}
+
+        <div className="comparison-wrap">
+          <div className="comparison-title">All Reps Comparison</div>
+          <table className="comparison-table">
+            <thead>
+              <tr>
+                <th>Rep</th>
+                <th>Commission</th>
+                <th>Units</th>
+                <th>FP Rate</th>
+                <th>FPs Sold</th>
+                <th>Missed $</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedReps.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "left", color: "var(--ink-3)" }}>
+                    No reps yet.
+                  </td>
+                </tr>
+              ) : (
+                sortedReps.map((rep, index) => {
+                  const statusTone = getRepStatusTone(rep.stats.fpRate);
+                  const statusClass = getRepStatusClass(statusTone);
+                  const isTopCommission = index < 3 && statusTone !== "behind";
+
+                  return (
+                    <tr key={`table-${rep.id}`}>
+                      <td>
+                        <span className="comp-rank">{formatRank(index)}</span>
+                        <span className="comp-name">{rep.name}</span>
+                        <div className="comp-team" style={{ paddingLeft: "26px" }}>
+                          {rep.teamLabel}
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          className={`comp-mono ${isTopCommission ? "comp-accent" : ""}`}
+                          style={statusTone === "behind" ? { color: "var(--red)" } : undefined}
+                        >
+                          {formatCurrency(rep.stats.commission)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="comp-mono">{formatUnits(rep.stats.units)}</span>
+                      </td>
+                      <td>
+                        <span className="comp-mono">{formatPercent(rep.stats.fpRate)}</span>
+                      </td>
+                      <td>
+                        <span className="comp-mono">{formatUnits(rep.stats.fpSold)}</span>
+                      </td>
+                      <td>
+                        <span className="comp-missed">{formatCurrency(rep.stats.missedFpCommission)}</span>
+                      </td>
+                      <td>
+                        <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&display=swap');
+
+        .manager-dashboard,
+        .manager-dashboard *,
+        .manager-dashboard *::before,
+        .manager-dashboard *::after {
+          box-sizing: border-box;
+        }
+
+        .manager-dashboard * {
+          margin: 0;
+          padding: 0;
+        }
+
+        .manager-dashboard {
+          --bg: #0e0f13;
+          --surface: #16181f;
+          --surface-2: #1e2028;
+          --border: #272a33;
+          --ink: #f2f3f5;
+          --ink-2: #9098a8;
+          --ink-3: #4a5060;
+          --accent: #e05a20;
+          --accent-2: #ff7a42;
+          --green: #22c55e;
+          --green-light: rgba(34, 197, 94, 0.1);
+          --amber: #f59e0b;
+          --amber-light: rgba(245, 158, 11, 0.1);
+          --red: #ef4444;
+          --red-light: rgba(239, 68, 68, 0.1);
+          --blue: #3b82f6;
+          background: var(--bg);
+          color: var(--ink);
+          font-family: "Syne", sans-serif;
+          font-size: 14px;
+          line-height: 1.5;
+          min-height: calc(100vh - 65px);
+        }
+
+        .manager-dashboard .mono {
+          font-family: "DM Mono", monospace;
+        }
+
+        .manager-dashboard .serif {
+          font-family: "Instrument Serif", serif;
+        }
+
+        .manager-dashboard .page {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 48px 40px 80px;
+        }
+
+        .manager-dashboard .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 36px;
+        }
+
+        .manager-dashboard .page-eyebrow {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.15em;
+          color: var(--ink-3);
+          margin-bottom: 8px;
+        }
+
+        .manager-dashboard .page-title {
+          font-family: "Instrument Serif", serif;
+          font-size: 44px;
+          letter-spacing: -1.5px;
+          line-height: 1;
+        }
+
+        .manager-dashboard .page-header-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding-top: 8px;
+        }
+
+        .manager-dashboard .year-toggle {
+          display: flex;
+          gap: 2px;
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 3px;
+        }
+
+        .manager-dashboard .year-btn {
+          font-family: "DM Mono", monospace;
+          font-size: 12px;
+          padding: 6px 14px;
+          border-radius: 5px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .manager-dashboard .year-btn.active {
+          background: var(--ink);
+          color: var(--bg);
+          font-weight: 500;
+        }
+
+        .manager-dashboard .year-btn.inactive {
+          background: transparent;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .add-rep-btn {
+          background: var(--accent);
+          color: white;
+          border: none;
+          padding: 9px 18px;
+          border-radius: 7px;
+          font-family: "Syne", sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          transition: background 0.15s;
+        }
+
+        .manager-dashboard .add-rep-btn:hover {
+          background: var(--accent-2);
+        }
+
+        .manager-dashboard .toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 28px;
+        }
+
+        .manager-dashboard .tabs {
+          display: flex;
+        }
+
+        .manager-dashboard .tab {
+          font-family: "Syne", sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          padding: 12px 18px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          transition: all 0.15s;
+          position: relative;
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+        }
+
+        .manager-dashboard .tab.active {
+          color: var(--ink);
+          border-bottom-color: var(--accent);
+        }
+
+        .manager-dashboard .tab.inactive {
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .tab.inactive:hover {
+          color: var(--ink-2);
+        }
+
+        .manager-dashboard .toolbar-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding-bottom: 12px;
+        }
+
+        .manager-dashboard .sort-label {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .sort-select {
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          color: var(--ink);
+          border-radius: 6px;
+          padding: 7px 28px 7px 12px;
+          font-family: "Syne", sans-serif;
+          font-size: 12px;
+          cursor: pointer;
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a5060' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 10px center;
+        }
+
+        .manager-dashboard .summary-bar {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1px;
+          background: var(--border);
+          border-radius: 10px;
+          overflow: hidden;
+          margin-bottom: 32px;
+        }
+
+        .manager-dashboard .summary-stat {
+          background: var(--surface);
+          padding: 20px 24px;
+        }
+
+        .manager-dashboard .summary-stat-label {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--ink-3);
+          margin-bottom: 6px;
+        }
+
+        .manager-dashboard .summary-stat-value {
+          font-family: "Instrument Serif", serif;
+          font-size: 30px;
+          letter-spacing: -0.5px;
+          line-height: 1;
+        }
+
+        .manager-dashboard .summary-stat-sub {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+          margin-top: 4px;
+        }
+
+        .manager-dashboard .team-section {
+          margin-bottom: 36px;
+        }
+
+        .manager-dashboard .team-header {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+
+        .manager-dashboard .team-name {
+          font-family: "Syne", sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--ink-2);
+        }
+
+        .manager-dashboard .team-meta {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .team-divider {
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+        }
+
+        .manager-dashboard .team-total-badge {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--accent);
+          background: rgba(224, 90, 32, 0.1);
+          border: 1px solid rgba(224, 90, 32, 0.2);
+          padding: 3px 10px;
+          border-radius: 99px;
+        }
+
+        .manager-dashboard .reps-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+        }
+
+        .manager-dashboard .rep-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 22px 24px;
+          transition: background 0.15s, border-color 0.15s;
+          cursor: pointer;
+        }
+
+        .manager-dashboard .rep-card:hover {
+          background: var(--surface-2);
+          border-color: var(--ink-3);
+        }
+
+        .manager-dashboard .rep-card-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 16px;
+        }
+
+        .manager-dashboard .rep-card-name {
+          font-family: "Syne", sans-serif;
+          font-size: 15px;
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+
+        .manager-dashboard .rep-card-badges {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        .manager-dashboard .rep-team-badge {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--ink-3);
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          padding: 3px 10px;
+          border-radius: 99px;
+        }
+
+        .manager-dashboard .rep-status-badge {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          font-weight: 500;
+          padding: 3px 10px;
+          border-radius: 99px;
+        }
+
+        .manager-dashboard .status-strong {
+          background: var(--green-light);
+          color: var(--green);
+        }
+
+        .manager-dashboard .status-average {
+          background: var(--amber-light);
+          color: var(--amber);
+        }
+
+        .manager-dashboard .status-behind {
+          background: var(--red-light);
+          color: var(--red);
+        }
+
+        .manager-dashboard .rep-rank {
+          font-family: "Instrument Serif", serif;
+          font-size: 32px;
+          color: var(--ink-3);
+          line-height: 1;
+          letter-spacing: -1px;
+        }
+
+        .manager-dashboard .rep-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-bottom: 14px;
+        }
+
+        .manager-dashboard .rep-stat-value {
+          font-family: "Instrument Serif", serif;
+          font-size: 24px;
+          letter-spacing: -0.5px;
+          line-height: 1;
+          margin-bottom: 3px;
+        }
+
+        .manager-dashboard .rep-stat-label {
+          font-family: "DM Mono", monospace;
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .commission-bar-wrap {
+          margin-bottom: 14px;
+        }
+
+        .manager-dashboard .commission-bar-track {
+          height: 4px;
+          background: var(--border);
+          border-radius: 99px;
+          overflow: hidden;
+        }
+
+        .manager-dashboard .commission-bar-fill {
+          height: 100%;
+          border-radius: 99px;
+          background: var(--accent);
+          transition: width 0.8s ease;
+        }
+
+        .manager-dashboard .rep-card-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .manager-dashboard .rep-card-actions {
+          display: flex;
+          gap: 8px;
+        }
+
+        .manager-dashboard .btn-sm {
+          font-family: "Syne", sans-serif;
+          font-size: 12px;
+          font-weight: 500;
+          padding: 6px 14px;
+          border-radius: 6px;
+          border: 1px solid var(--border);
+          background: var(--surface-2);
+          color: var(--ink-2);
+          cursor: pointer;
+          transition: all 0.15s;
+          text-decoration: none;
+        }
+
+        .manager-dashboard .btn-sm:hover {
+          border-color: var(--ink-3);
+          color: var(--ink);
+        }
+
+        .manager-dashboard .btn-sm.primary {
+          background: var(--accent);
+          border-color: var(--accent);
+          color: white;
+        }
+
+        .manager-dashboard .btn-sm.primary:hover {
+          background: var(--accent-2);
+          border-color: var(--accent-2);
+          color: white;
+        }
+
+        .manager-dashboard .btn-sm:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .manager-dashboard .rep-synced {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .comparison-wrap {
+          margin-top: 40px;
+          overflow-x: auto;
+        }
+
+        .manager-dashboard .comparison-title {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: var(--ink-3);
+          margin-bottom: 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .manager-dashboard .comparison-title::after {
+          content: "";
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+        }
+
+        .manager-dashboard .comparison-table {
+          width: 100%;
+          min-width: 760px;
+          border-collapse: collapse;
+        }
+
+        .manager-dashboard .comparison-table th {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--ink-3);
+          padding: 0 14px 12px;
+          text-align: right;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .manager-dashboard .comparison-table th:first-child {
+          text-align: left;
+          padding-left: 0;
+        }
+
+        .manager-dashboard .comparison-table td {
+          padding: 13px 14px;
+          text-align: right;
+          border-bottom: 1px solid rgba(39, 42, 51, 0.6);
+          font-size: 13px;
+        }
+
+        .manager-dashboard .comparison-table td:first-child {
+          text-align: left;
+          padding-left: 0;
+        }
+
+        .manager-dashboard .comparison-table tbody tr:hover td {
+          background: var(--surface-2);
+        }
+
+        .manager-dashboard .comp-rank {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+          width: 24px;
+          display: inline-block;
+        }
+
+        .manager-dashboard .comp-name {
+          font-weight: 600;
+        }
+
+        .manager-dashboard .comp-team {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+          margin-top: 2px;
+        }
+
+        .manager-dashboard .comp-mono {
+          font-family: "DM Mono", monospace;
+          font-size: 12px;
+        }
+
+        .manager-dashboard .comp-accent {
+          color: var(--accent);
+        }
+
+        .manager-dashboard .comp-missed {
+          color: var(--amber);
+          font-family: "DM Mono", monospace;
+          font-size: 12px;
+        }
+
+        .manager-dashboard .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.75);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 200;
+          padding: 16px;
+        }
+
+        .manager-dashboard .modal {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 40px;
+          width: 100%;
+          max-width: 480px;
+          position: relative;
+        }
+
+        .manager-dashboard .modal-title {
+          font-family: "Instrument Serif", serif;
+          font-size: 32px;
+          letter-spacing: -1px;
+          margin-bottom: 28px;
+        }
+
+        .manager-dashboard .form-group {
+          margin-bottom: 20px;
+        }
+
+        .manager-dashboard .form-label {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--ink-3);
+          display: block;
+          margin-bottom: 7px;
+        }
+
+        .manager-dashboard .form-input {
+          width: 100%;
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          border-radius: 7px;
+          padding: 11px 14px;
+          color: var(--ink);
+          font-family: "Syne", sans-serif;
+          font-size: 13px;
+          transition: border-color 0.15s;
+          outline: none;
+        }
+
+        .manager-dashboard .form-input:focus {
+          border-color: var(--accent);
+        }
+
+        .manager-dashboard .form-input::placeholder {
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .form-hint {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+          margin-top: 5px;
+        }
+
+        .manager-dashboard .modal-submit {
+          width: 100%;
+          background: var(--accent);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 14px;
+          font-family: "Syne", sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          margin-top: 8px;
+          transition: background 0.15s;
+        }
+
+        .manager-dashboard .modal-submit:hover {
+          background: var(--accent-2);
+        }
+
+        .manager-dashboard .modal-submit:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .manager-dashboard .modal-cancel {
+          display: block;
+          width: 100%;
+          text-align: center;
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+          margin-top: 14px;
+          cursor: pointer;
+          background: transparent;
+          border: 0;
+        }
+
+        .manager-dashboard .modal-cancel:hover {
+          color: var(--ink-2);
+        }
+
+        .manager-dashboard .modal-close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          background: none;
+          border: none;
+          color: var(--ink-3);
+          cursor: pointer;
+          font-size: 18px;
+          line-height: 1;
+          padding: 4px;
+        }
+
+        @media (max-width: 1024px) {
+          .manager-dashboard .page {
+            padding: 32px 24px 64px;
+          }
+        }
+
+        @media (max-width: 880px) {
+          .manager-dashboard .page-header {
+            flex-direction: column;
+            gap: 16px;
+          }
+
+          .manager-dashboard .page-header-right {
+            width: 100%;
+            justify-content: space-between;
+          }
+
+          .manager-dashboard .toolbar {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .manager-dashboard .toolbar-right {
+            width: 100%;
+            justify-content: flex-end;
+          }
+
+          .manager-dashboard .summary-bar {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .manager-dashboard .reps-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .manager-dashboard .team-header {
+            flex-wrap: wrap;
+          }
+
+          .manager-dashboard .team-divider {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .manager-dashboard .page {
+            padding: 28px 16px 48px;
+          }
+
+          .manager-dashboard .page-title {
+            font-size: 36px;
+          }
+
+          .manager-dashboard .year-btn {
+            padding: 6px 10px;
+          }
+
+          .manager-dashboard .add-rep-btn {
+            padding: 9px 12px;
+          }
+
+          .manager-dashboard .summary-bar {
+            grid-template-columns: 1fr;
+          }
+
+          .manager-dashboard .rep-card-footer {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+          }
+
+          .manager-dashboard .modal {
+            padding: 28px 20px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
