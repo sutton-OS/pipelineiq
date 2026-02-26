@@ -22,6 +22,7 @@ type YearTaggedPayPeriod = PayPeriod & {
 
 type ParsedTransactionRow = {
   year: number | null;
+  transactionDate: string | null;
   commission: number;
   units: number;
   membershipType: MembershipKey;
@@ -249,6 +250,7 @@ function parseCommissionData(rawRows: CsvRawRow[]) {
 
     transactionRows.push({
       year: rowYear,
+      transactionDate: transactionDate ? transactionDate.toISOString() : null,
       commission,
       units,
       membershipType: categorizeMembership(membershipTypeRaw),

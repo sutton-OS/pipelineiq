@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { Leaderboard, type LeaderboardPeriod } from "@/components/Leaderboard";
 import { repsStore, type Rep } from "@/lib/reps-store";
 import { fetchAndParseSheet, getRepStats, parseStoredRepData } from "@/lib/rep-sync";
 
 const YEAR_OPTIONS = [2025, 2026] as const;
 
 type SortOption = "commission" | "units" | "fpRate" | "name" | "lastSynced";
-type RosterView = "team" | "all";
+type RosterView = "team" | "all" | "leaderboard";
 type RepStatusTone = "strong" | "average" | "behind";
+type SyncChipStatus = "pending" | "syncing" | "done" | "error";
 
 type RepCardData = Rep & {
   teamLabel: string;
@@ -49,6 +51,19 @@ function formatSyncedTime(value: string) {
   return `synced ${days}d ago`;
 }
 
+function formatLastSyncedStatus(value: string) {
+  if (!value) return "never";
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "never";
+  const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutesAgo < 1) return "just now";
+  if (minutesAgo < 60) return `${minutesAgo} min ago`;
+  const hours = Math.floor(minutesAgo / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 function buildRepId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -83,6 +98,7 @@ export function RepRoster() {
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [sortBy, setSortBy] = useState<SortOption>("commission");
   const [viewMode, setViewMode] = useState<RosterView>("team");
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("full");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [repName, setRepName] = useState("");
@@ -92,16 +108,47 @@ export function RepRoster() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [syncingRepId, setSyncingRepId] = useState<string | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncStartedAt, setSyncStartedAt] = useState<string | null>(null);
+  const [syncCompletedCount, setSyncCompletedCount] = useState(0);
+  const [syncChipStatuses, setSyncChipStatuses] = useState<Record<string, SyncChipStatus>>({});
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
+  const [timeTick, setTimeTick] = useState(0);
 
   useEffect(() => {
     const nowYear = new Date().getFullYear();
     if (nowYear === 2025 || nowYear === 2026) setSelectedYear(nowYear);
 
-    setReps(repsStore.getAll());
+    const initialReps = repsStore.getAll();
+    setReps(initialReps);
+    setLastSyncedAt(
+      initialReps.reduce((latest, rep) => {
+        if (!rep.lastSynced) return latest;
+        if (!latest) return rep.lastSynced;
+        return Date.parse(rep.lastSynced) > Date.parse(latest) ? rep.lastSynced : latest;
+      }, "")
+    );
 
-    const onStorage = () => setReps(repsStore.getAll());
+    const onStorage = () => {
+      const nextReps = repsStore.getAll();
+      setReps(nextReps);
+      setLastSyncedAt(
+        nextReps.reduce((latest, rep) => {
+          if (!rep.lastSynced) return latest;
+          if (!latest) return rep.lastSynced;
+          return Date.parse(rep.lastSynced) > Date.parse(latest) ? rep.lastSynced : latest;
+        }, "")
+      );
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTimeTick((tick) => tick + 1);
+    }, 60_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -217,6 +264,15 @@ export function RepRoster() {
     return ranks;
   }, [sortedReps]);
 
+  const syncProgressPercent = useMemo(() => {
+    if (reps.length === 0) return 0;
+    return Math.min((syncCompletedCount / reps.length) * 100, 100);
+  }, [reps.length, syncCompletedCount]);
+
+  const syncStatusLabel = useMemo(() => {
+    return formatLastSyncedStatus(lastSyncedAt || syncStartedAt || "");
+  }, [lastSyncedAt, syncStartedAt, timeTick]);
+
   function resetForm() {
     setRepName("");
     setTeamName("");
@@ -263,7 +319,9 @@ export function RepRoster() {
         data: parsed,
       });
 
-      setReps(repsStore.getAll());
+      const nextReps = repsStore.getAll();
+      setReps(nextReps);
+      setLastSyncedAt(nowIso);
       closeAddDialog();
       resetForm();
       toast.success("Rep added and synced.");
@@ -281,11 +339,20 @@ export function RepRoster() {
 
     try {
       const parsed = await fetchAndParseSheet(rep.sheetUrl);
+      const syncedAtIso = new Date().toISOString();
       repsStore.update(rep.id, {
         data: parsed,
-        lastSynced: new Date().toISOString(),
+        lastSynced: syncedAtIso,
       });
-      setReps(repsStore.getAll());
+      const nextReps = repsStore.getAll();
+      setReps(nextReps);
+      setLastSyncedAt(
+        nextReps.reduce((latest, item) => {
+          if (!item.lastSynced) return latest;
+          if (!latest) return item.lastSynced;
+          return Date.parse(item.lastSynced) > Date.parse(latest) ? item.lastSynced : latest;
+        }, syncedAtIso)
+      );
       toast.success(`Synced ${rep.name}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to sync rep.";
@@ -293,6 +360,46 @@ export function RepRoster() {
     } finally {
       setSyncingRepId(null);
     }
+  }
+
+  async function handleSyncAll() {
+    if (isSyncingAll || reps.length === 0) return;
+
+    const repsSnapshot = repsStore.getAll();
+    if (repsSnapshot.length === 0) return;
+
+    setIsSyncingAll(true);
+    setSyncStartedAt(new Date().toISOString());
+    setSyncCompletedCount(0);
+    setSyncChipStatuses(
+      Object.fromEntries(repsSnapshot.map((rep) => [rep.id, "syncing" as SyncChipStatus]))
+    );
+
+    const syncTasks = repsSnapshot.map(async (rep) => {
+      try {
+        const parsed = await fetchAndParseSheet(rep.sheetUrl);
+        repsStore.update(rep.id, {
+          data: parsed,
+          lastSynced: new Date().toISOString(),
+        });
+
+        setSyncChipStatuses((current) => ({ ...current, [rep.id]: "done" }));
+      } catch {
+        setSyncChipStatuses((current) => ({ ...current, [rep.id]: "error" }));
+      } finally {
+        setSyncCompletedCount((count) => count + 1);
+      }
+    });
+
+    await Promise.all(syncTasks);
+
+    const syncedAtIso = new Date().toISOString();
+    const nextReps = repsStore.getAll();
+    setReps(nextReps);
+    setLastSyncedAt(syncedAtIso);
+    setIsSyncingAll(false);
+    setSyncStartedAt(null);
+    toast.success("Sync complete.");
   }
 
   function renderRepCard(rep: RepCardData) {
@@ -443,6 +550,29 @@ export function RepRoster() {
             <div className="page-title">Team Dashboard</div>
           </div>
           <div className="page-header-right">
+            <div className="sync-status">
+              Last synced: <span>{syncStatusLabel}</span>
+            </div>
+            <button
+              className={`sync-all-btn ${isSyncingAll ? "syncing" : ""}`}
+              type="button"
+              onClick={() => void handleSyncAll()}
+              disabled={isSyncingAll || reps.length === 0}
+            >
+              <svg
+                className="sync-icon"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <path d="M23 4v6h-6M1 20v-6h6" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+              {isSyncingAll ? "Syncing..." : "Sync All"}
+            </button>
             <div className="year-toggle">
               {YEAR_OPTIONS.map((year) => {
                 const isActive = year === selectedYear;
@@ -468,30 +598,63 @@ export function RepRoster() {
           </div>
         </div>
 
-        <div className="summary-bar">
-          <div className="summary-stat">
-            <div className="summary-stat-label">Total Team Commission</div>
-            <div className="summary-stat-value">{formatCurrency(totalTeamCommission)}</div>
-            <div className="summary-stat-sub">across all reps · {selectedYear}</div>
+        <div className={`sync-progress ${isSyncingAll || syncStartedAt ? "visible" : ""}`}>
+          <div className="sync-progress-label">
+            <span>Syncing all reps...</span>
+            <span>
+              {syncCompletedCount} / {reps.length} complete
+            </span>
           </div>
-          <div className="summary-stat">
-            <div className="summary-stat-label">Total Units</div>
-            <div className="summary-stat-value">{formatUnits(totalUnits)}</div>
-            <div className="summary-stat-sub">members sold</div>
+          <div className="sync-track">
+            <div className="sync-fill" style={{ width: `${syncProgressPercent}%` }} />
           </div>
-          <div className="summary-stat">
-            <div className="summary-stat-label">Avg FP Rate</div>
-            <div className="summary-stat-value">{formatPercent(averageTeamFpRate)}</div>
-            <div className="summary-stat-sub">across {sortedReps.length} reps</div>
-          </div>
-          <div className="summary-stat">
-            <div className="summary-stat-label">Missed FP Commission</div>
-            <div className="summary-stat-value" style={{ color: "var(--amber)" }}>
-              {formatCurrency(totalMissedCommission)}
-            </div>
-            <div className="summary-stat-sub">team-wide opportunity</div>
+          <div className="sync-reps">
+            {reps.map((rep) => {
+              const chipStatus = syncChipStatuses[rep.id] ?? "pending";
+              const className =
+                chipStatus === "done"
+                  ? "sync-rep-chip done"
+                  : chipStatus === "syncing"
+                    ? "sync-rep-chip syncing"
+                    : chipStatus === "error"
+                      ? "sync-rep-chip error"
+                      : "sync-rep-chip";
+              return (
+                <div key={`sync-chip-${rep.id}`} className={className}>
+                  <span className={`chip-dot ${chipStatus === "syncing" ? "spinning" : ""}`} />
+                  {rep.name}
+                </div>
+              );
+            })}
           </div>
         </div>
+
+        {viewMode !== "leaderboard" ? (
+          <div className="summary-bar">
+            <div className="summary-stat">
+              <div className="summary-stat-label">Total Team Commission</div>
+              <div className="summary-stat-value">{formatCurrency(totalTeamCommission)}</div>
+              <div className="summary-stat-sub">across all reps · {selectedYear}</div>
+            </div>
+            <div className="summary-stat">
+              <div className="summary-stat-label">Total Units</div>
+              <div className="summary-stat-value">{formatUnits(totalUnits)}</div>
+              <div className="summary-stat-sub">members sold</div>
+            </div>
+            <div className="summary-stat">
+              <div className="summary-stat-label">Avg FP Rate</div>
+              <div className="summary-stat-value">{formatPercent(averageTeamFpRate)}</div>
+              <div className="summary-stat-sub">across {sortedReps.length} reps</div>
+            </div>
+            <div className="summary-stat">
+              <div className="summary-stat-label">Missed FP Commission</div>
+              <div className="summary-stat-value" style={{ color: "var(--amber)" }}>
+                {formatCurrency(totalMissedCommission)}
+              </div>
+              <div className="summary-stat-sub">team-wide opportunity</div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="toolbar">
           <div className="tabs">
@@ -509,123 +672,164 @@ export function RepRoster() {
             >
               All Reps
             </button>
+            <button
+              type="button"
+              className={`tab ${viewMode === "leaderboard" ? "active" : "inactive"}`}
+              onClick={() => setViewMode("leaderboard")}
+            >
+              Leaderboard
+            </button>
           </div>
           <div className="toolbar-right">
-            <span className="sort-label">Sort</span>
-            <select
-              className="sort-select"
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as SortOption)}
-            >
-              <option value="commission">Most commission</option>
-              <option value="units">Most units</option>
-              <option value="fpRate">Best FP rate</option>
-              <option value="name">Name A-Z</option>
-              <option value="lastSynced">Last synced</option>
-            </select>
-          </div>
-        </div>
-
-        {sortedReps.length === 0 ? (
-          <div className="team-section">
-            <div className="rep-card" style={{ cursor: "default" }}>
-              <div className="rep-card-name">No reps yet</div>
-              <p className="rep-synced" style={{ marginTop: "8px" }}>
-                Add your first rep and sync a Google Sheet to populate the dashboard.
-              </p>
-              <div className="rep-card-actions" style={{ marginTop: "16px" }}>
-                <button type="button" className="btn-sm primary" onClick={openAddDialog}>
-                  Add Rep
+            {viewMode === "leaderboard" ? (
+              <div className="period-toggle">
+                <button
+                  type="button"
+                  className={`period-btn ${leaderboardPeriod === "full" ? "active" : "inactive"}`}
+                  onClick={() => setLeaderboardPeriod("full")}
+                >
+                  Full Period
+                </button>
+                <button
+                  type="button"
+                  className={`period-btn ${leaderboardPeriod === "firstHalf" ? "active" : "inactive"}`}
+                  onClick={() => setLeaderboardPeriod("firstHalf")}
+                >
+                  1st - 15th
+                </button>
+                <button
+                  type="button"
+                  className={`period-btn ${leaderboardPeriod === "secondHalf" ? "active" : "inactive"}`}
+                  onClick={() => setLeaderboardPeriod("secondHalf")}
+                >
+                  16th - End
                 </button>
               </div>
-            </div>
+            ) : (
+              <>
+                <span className="sort-label">Sort</span>
+                <select
+                  className="sort-select"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as SortOption)}
+                >
+                  <option value="commission">Most commission</option>
+                  <option value="units">Most units</option>
+                  <option value="fpRate">Best FP rate</option>
+                  <option value="name">Name A-Z</option>
+                  <option value="lastSynced">Last synced</option>
+                </select>
+              </>
+            )}
           </div>
-        ) : viewMode === "all" ? (
-          <div className="team-section">
-            <div className="reps-grid">{sortedReps.map(renderRepCard)}</div>
-          </div>
+        </div>
+
+        {viewMode === "leaderboard" ? (
+          <Leaderboard reps={reps} selectedYear={selectedYear} period={leaderboardPeriod} />
         ) : (
-          groupedByTeam.map((group) => (
-            <div className="team-section" key={group.team}>
-              <div className="team-header">
-                <span className="team-name">{group.team}</span>
-                <span className="team-meta">{group.members.length} reps</span>
-                <div className="team-divider" />
-                <span className="team-total-badge">
-                  {formatCurrency(group.teamCommission)} total · {formatPercent(group.averageFpRate)} avg FP
-                </span>
+          <>
+            {sortedReps.length === 0 ? (
+              <div className="team-section">
+                <div className="rep-card" style={{ cursor: "default" }}>
+                  <div className="rep-card-name">No reps yet</div>
+                  <p className="rep-synced" style={{ marginTop: "8px" }}>
+                    Add your first rep and sync a Google Sheet to populate the dashboard.
+                  </p>
+                  <div className="rep-card-actions" style={{ marginTop: "16px" }}>
+                    <button type="button" className="btn-sm primary" onClick={openAddDialog}>
+                      Add Rep
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="reps-grid">{group.members.map(renderRepCard)}</div>
-            </div>
-          ))
-        )}
+            ) : viewMode === "all" ? (
+              <div className="team-section">
+                <div className="reps-grid">{sortedReps.map(renderRepCard)}</div>
+              </div>
+            ) : (
+              groupedByTeam.map((group) => (
+                <div className="team-section" key={group.team}>
+                  <div className="team-header">
+                    <span className="team-name">{group.team}</span>
+                    <span className="team-meta">{group.members.length} reps</span>
+                    <div className="team-divider" />
+                    <span className="team-total-badge">
+                      {formatCurrency(group.teamCommission)} total · {formatPercent(group.averageFpRate)} avg FP
+                    </span>
+                  </div>
+                  <div className="reps-grid">{group.members.map(renderRepCard)}</div>
+                </div>
+              ))
+            )}
 
-        <div className="comparison-wrap">
-          <div className="comparison-title">All Reps Comparison</div>
-          <table className="comparison-table">
-            <thead>
-              <tr>
-                <th>Rep</th>
-                <th>Commission</th>
-                <th>Units</th>
-                <th>FP Rate</th>
-                <th>FPs Sold</th>
-                <th>Missed $</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedReps.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "left", color: "var(--ink-3)" }}>
-                    No reps yet.
-                  </td>
-                </tr>
-              ) : (
-                sortedReps.map((rep, index) => {
-                  const statusTone = getRepStatusTone(rep.stats.fpRate);
-                  const statusClass = getRepStatusClass(statusTone);
-                  const isTopCommission = index < 3 && statusTone !== "behind";
-
-                  return (
-                    <tr key={`table-${rep.id}`}>
-                      <td>
-                        <span className="comp-rank">{formatRank(index)}</span>
-                        <span className="comp-name">{rep.name}</span>
-                        <div className="comp-team" style={{ paddingLeft: "26px" }}>
-                          {rep.teamLabel}
-                        </div>
-                      </td>
-                      <td>
-                        <span
-                          className={`comp-mono ${isTopCommission ? "comp-accent" : ""}`}
-                          style={statusTone === "behind" ? { color: "var(--red)" } : undefined}
-                        >
-                          {formatCurrency(rep.stats.commission)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="comp-mono">{formatUnits(rep.stats.units)}</span>
-                      </td>
-                      <td>
-                        <span className="comp-mono">{formatPercent(rep.stats.fpRate)}</span>
-                      </td>
-                      <td>
-                        <span className="comp-mono">{formatUnits(rep.stats.fpSold)}</span>
-                      </td>
-                      <td>
-                        <span className="comp-missed">{formatCurrency(rep.stats.missedFpCommission)}</span>
-                      </td>
-                      <td>
-                        <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
+            <div className="comparison-wrap">
+              <div className="comparison-title">All Reps Comparison</div>
+              <table className="comparison-table">
+                <thead>
+                  <tr>
+                    <th>Rep</th>
+                    <th>Commission</th>
+                    <th>Units</th>
+                    <th>FP Rate</th>
+                    <th>FPs Sold</th>
+                    <th>Missed $</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedReps.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "left", color: "var(--ink-3)" }}>
+                        No reps yet.
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    sortedReps.map((rep, index) => {
+                      const statusTone = getRepStatusTone(rep.stats.fpRate);
+                      const statusClass = getRepStatusClass(statusTone);
+                      const isTopCommission = index < 3 && statusTone !== "behind";
+
+                      return (
+                        <tr key={`table-${rep.id}`}>
+                          <td>
+                            <span className="comp-rank">{formatRank(index)}</span>
+                            <span className="comp-name">{rep.name}</span>
+                            <div className="comp-team" style={{ paddingLeft: "26px" }}>
+                              {rep.teamLabel}
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className={`comp-mono ${isTopCommission ? "comp-accent" : ""}`}
+                              style={statusTone === "behind" ? { color: "var(--red)" } : undefined}
+                            >
+                              {formatCurrency(rep.stats.commission)}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="comp-mono">{formatUnits(rep.stats.units)}</span>
+                          </td>
+                          <td>
+                            <span className="comp-mono">{formatPercent(rep.stats.fpRate)}</span>
+                          </td>
+                          <td>
+                            <span className="comp-mono">{formatUnits(rep.stats.fpSold)}</span>
+                          </td>
+                          <td>
+                            <span className="comp-missed">{formatCurrency(rep.stats.missedFpCommission)}</span>
+                          </td>
+                          <td>
+                            <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       <style jsx global>{`
@@ -710,6 +914,76 @@ export function RepRoster() {
           align-items: center;
           gap: 10px;
           padding-top: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .manager-dashboard .sync-status {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+        }
+
+        .manager-dashboard .sync-status span {
+          color: var(--green);
+        }
+
+        .manager-dashboard .sync-all-btn {
+          background: var(--surface-2);
+          color: var(--ink-2);
+          border: 1px solid var(--border);
+          padding: 9px 18px;
+          border-radius: 7px;
+          font-family: "Syne", sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          transition: all 0.15s;
+        }
+
+        .manager-dashboard .sync-all-btn:hover {
+          border-color: var(--ink-3);
+          color: var(--ink);
+        }
+
+        .manager-dashboard .sync-all-btn.syncing {
+          border-color: var(--accent);
+          color: var(--accent);
+        }
+
+        .manager-dashboard .sync-all-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .manager-dashboard .sync-icon {
+          transition: transform 0.6s ease;
+        }
+
+        .manager-dashboard .sync-all-btn.syncing .sync-icon {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes pulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.3;
+          }
         }
 
         .manager-dashboard .year-toggle {
@@ -808,6 +1082,37 @@ export function RepRoster() {
           padding-bottom: 12px;
         }
 
+        .manager-dashboard .period-toggle {
+          display: flex;
+          gap: 2px;
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          border-radius: 7px;
+          padding: 3px;
+        }
+
+        .manager-dashboard .period-btn {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          padding: 5px 12px;
+          border-radius: 5px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.15s;
+          white-space: nowrap;
+        }
+
+        .manager-dashboard .period-btn.active {
+          background: var(--accent);
+          color: white;
+          font-weight: 500;
+        }
+
+        .manager-dashboard .period-btn.inactive {
+          background: transparent;
+          color: var(--ink-3);
+        }
+
         .manager-dashboard .sort-label {
           font-family: "DM Mono", monospace;
           font-size: 10px;
@@ -829,6 +1134,96 @@ export function RepRoster() {
           background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a5060' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
           background-repeat: no-repeat;
           background-position: right 10px center;
+        }
+
+        .manager-dashboard .sync-progress {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 16px 24px;
+          margin-bottom: 24px;
+          display: none;
+        }
+
+        .manager-dashboard .sync-progress.visible {
+          display: block;
+        }
+
+        .manager-dashboard .sync-progress-label {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+          margin-bottom: 10px;
+          display: flex;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .manager-dashboard .sync-progress-label span {
+          color: var(--accent);
+        }
+
+        .manager-dashboard .sync-track {
+          height: 3px;
+          background: var(--border);
+          border-radius: 99px;
+          overflow: hidden;
+        }
+
+        .manager-dashboard .sync-fill {
+          height: 100%;
+          border-radius: 99px;
+          background: var(--accent);
+          transition: width 0.3s ease;
+        }
+
+        .manager-dashboard .sync-reps {
+          display: flex;
+          gap: 8px;
+          margin-top: 10px;
+          flex-wrap: wrap;
+        }
+
+        .manager-dashboard .sync-rep-chip {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          padding: 3px 10px;
+          border-radius: 99px;
+          border: 1px solid var(--border);
+          color: var(--ink-3);
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .manager-dashboard .sync-rep-chip.done {
+          border-color: rgba(34, 197, 94, 0.3);
+          color: var(--green);
+          background: var(--green-light);
+        }
+
+        .manager-dashboard .sync-rep-chip.syncing {
+          border-color: rgba(224, 90, 32, 0.3);
+          color: var(--accent);
+          background: rgba(224, 90, 32, 0.08);
+        }
+
+        .manager-dashboard .sync-rep-chip.error {
+          border-color: rgba(239, 68, 68, 0.3);
+          color: var(--red);
+          background: var(--red-light);
+        }
+
+        .manager-dashboard .chip-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+
+        .manager-dashboard .chip-dot.spinning {
+          animation: pulse 0.8s infinite;
         }
 
         .manager-dashboard .summary-bar {
