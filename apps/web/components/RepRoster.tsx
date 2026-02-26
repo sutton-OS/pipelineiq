@@ -41,7 +41,7 @@ const shellVars = {
 } as CSSProperties;
 
 const cardHoverTransition = {
-  transition: "background 0.2s ease",
+  transition: "all 0.15s ease",
 } as CSSProperties;
 
 function formatCurrency(value: number) {
@@ -63,17 +63,11 @@ function formatPercent(value: number) {
 }
 
 function formatSyncedTime(value: string) {
-  if (!value) return "Never";
+  if (!value) return "Last synced never";
   const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return "Never";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
+  if (Number.isNaN(timestamp)) return "Last synced never";
+  const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  return `Last synced ${minutesAgo} min ago`;
 }
 
 function buildRepId() {
@@ -298,13 +292,13 @@ export function RepRoster() {
         <div className="mt-5 grid grid-cols-3 gap-5">
           <div>
             <p
-              className="text-[16px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-mono)" }}
+              className="text-[26px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)" }}
             >
               {formatCurrency(rep.stats.commission)}
             </p>
             <p
-              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
               style={{ fontFamily: "var(--font-mono)" }}
             >
               Commission
@@ -312,13 +306,13 @@ export function RepRoster() {
           </div>
           <div>
             <p
-              className="text-[16px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-mono)" }}
+              className="text-[26px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)" }}
             >
               {formatUnits(rep.stats.units)}
             </p>
             <p
-              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
               style={{ fontFamily: "var(--font-mono)" }}
             >
               Units
@@ -326,13 +320,13 @@ export function RepRoster() {
           </div>
           <div>
             <p
-              className="text-[16px] leading-none text-[var(--ink)]"
-              style={{ fontFamily: "var(--font-mono)" }}
+              className="text-[26px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)" }}
             >
               {formatPercent(rep.stats.fpRate)}
             </p>
             <p
-              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              className="mt-2 text-[9px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
               style={{ fontFamily: "var(--font-mono)" }}
             >
               FP Rate
@@ -340,7 +334,7 @@ export function RepRoster() {
           </div>
         </div>
 
-        <div className="mt-5 h-1 overflow-hidden rounded-[99px] bg-[var(--border)]">
+        <div className="my-4 h-1 overflow-hidden rounded-[99px] bg-[var(--border)]">
           <div
             className="h-full rounded-[99px] bg-[var(--accent)]"
             style={{ width: `${commissionBarPercent}%` }}
@@ -351,7 +345,7 @@ export function RepRoster() {
           <div className="flex items-center gap-2">
             <Link
               href={`/manager/${rep.id}`}
-              className={`${syne.className} inline-flex items-center rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-4 py-[7px] text-[13px] text-[var(--ink)] transition-colors hover:bg-[var(--surface)]`}
+              className={`${syne.className} inline-flex items-center rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] hover:bg-[var(--surface)]`}
             >
               View Report
             </Link>
@@ -359,7 +353,7 @@ export function RepRoster() {
               type="button"
               onClick={() => void handleSync(rep)}
               disabled={isSyncing}
-              className={`${syne.className} inline-flex items-center gap-1.5 rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-4 py-[7px] text-[13px] text-[var(--ink)] transition-colors hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60`}
+              className={`${syne.className} inline-flex items-center gap-1.5 rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Sync
@@ -407,7 +401,7 @@ export function RepRoster() {
                     key={year}
                     type="button"
                     onClick={() => setSelectedYear(year)}
-                    className="rounded-[6px] px-[14px] py-[6px] text-[12px] transition-colors"
+                    className="rounded-[6px] px-[14px] py-[6px] text-[12px] [transition:all_0.15s_ease]"
                     style={{
                       fontFamily: "var(--font-mono)",
                       background: isActive ? "var(--ink)" : "var(--surface-2)",
@@ -423,7 +417,7 @@ export function RepRoster() {
             <button
               type="button"
               onClick={openAddDialog}
-              className={`${syne.className} rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white`}
+              className={`${syne.className} rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-90`}
             >
               Add Rep
             </button>
@@ -431,12 +425,12 @@ export function RepRoster() {
         </header>
 
         <section className="mb-7 border-b border-[var(--border)]">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex items-end justify-between gap-4">
             <div className="flex items-end">
               <button
                 type="button"
                 onClick={() => setViewMode("team")}
-                className={`${syne.className} px-4 py-[10px] text-[13px] ${
+                className={`${syne.className} px-4 py-[10px] text-[13px] [transition:all_0.15s_ease] ${
                   viewMode === "team"
                     ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
                     : "border-b-2 border-transparent text-[var(--ink-3)]"
@@ -447,7 +441,7 @@ export function RepRoster() {
               <button
                 type="button"
                 onClick={() => setViewMode("all")}
-                className={`${syne.className} px-4 py-[10px] text-[13px] ${
+                className={`${syne.className} px-4 py-[10px] text-[13px] [transition:all_0.15s_ease] ${
                   viewMode === "all"
                     ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
                     : "border-b-2 border-transparent text-[var(--ink-3)]"
@@ -457,7 +451,7 @@ export function RepRoster() {
               </button>
             </div>
 
-            <div className="mb-2 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <label
                 htmlFor="sort-reps"
                 className="text-[10px] uppercase tracking-[0.12em] text-[var(--ink-3)]"
@@ -469,7 +463,7 @@ export function RepRoster() {
                 id="sort-reps"
                 value={sortBy}
                 onChange={(event) => setSortBy(event.target.value as SortOption)}
-                className={`${syne.className} rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-[7px] text-[12px] text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none`}
+                className={`${syne.className} rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-[7px] text-[12px] text-[var(--ink)] [transition:all_0.15s_ease] focus:border-[var(--accent)] focus:outline-none`}
               >
                 <option value="commission">Most commission</option>
                 <option value="units">Most units</option>
@@ -482,15 +476,15 @@ export function RepRoster() {
         </section>
 
         {sortedReps.length === 0 ? (
-          <div className="rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] px-8 py-[60px] text-center">
+          <div className="rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] px-8 py-20 text-center">
             <p
-              className="text-[48px] leading-none text-[var(--ink-3)]"
+              className="text-[56px] leading-none text-[var(--ink-3)]"
               style={{ fontFamily: "var(--font-serif)" }}
             >
               +
             </p>
             <p
-              className="mt-4 text-[24px] text-[var(--ink)]"
+              className="mt-4 text-[28px] text-[var(--ink)]"
               style={{ fontFamily: "var(--font-serif)" }}
             >
               No reps yet
@@ -501,7 +495,7 @@ export function RepRoster() {
             <button
               type="button"
               onClick={openAddDialog}
-              className={`${syne.className} mt-6 rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white`}
+              className={`${syne.className} mt-6 rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-90`}
             >
               Add your first rep &rarr;
             </button>
@@ -509,18 +503,18 @@ export function RepRoster() {
         ) : viewMode === "all" ? (
           <div className="grid gap-4 lg:grid-cols-2">{sortedReps.map(renderRepCard)}</div>
         ) : (
-          <div className="space-y-7">
+          <div className="space-y-4">
             {groupedByTeam.map((group) => (
               <section key={group.team}>
                 <div className="mb-4 flex items-center gap-4">
-                  <div className="shrink-0">
+                  <div className="flex shrink-0 items-center gap-3">
                     <h2
-                      className={`${syne.className} text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--ink)]`}
+                      className={`${syne.className} text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-3)]`}
                     >
                       {group.team}
                     </h2>
                     <p
-                      className="mt-1 text-[11px] text-[var(--ink-3)]"
+                      className="text-[11px] text-[var(--ink-3)]"
                       style={{ fontFamily: "var(--font-mono)" }}
                     >
                       {group.members.length} reps &middot; {formatCurrency(group.teamCommission)} total &middot;{" "}
@@ -540,15 +534,15 @@ export function RepRoster() {
 
       {dialogOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.7)] p-5"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.75)] p-5"
           onClick={closeAddDialog}
         >
           <div
-            className="w-full max-w-[480px] rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-9"
+            className="w-full max-w-[480px] rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-10"
             onClick={(event) => event.stopPropagation()}
           >
             <h2
-              className="text-[28px] leading-none text-[var(--ink)]"
+              className="text-[32px] leading-none text-[var(--ink)]"
               style={{ fontFamily: "var(--font-serif)" }}
             >
               Add Rep
@@ -568,7 +562,7 @@ export function RepRoster() {
                   value={repName}
                   onChange={(event) => setRepName(event.target.value)}
                   placeholder="Tyler Sutton"
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
               </div>
 
@@ -586,7 +580,7 @@ export function RepRoster() {
                   value={teamName}
                   onChange={(event) => setTeamName(event.target.value)}
                   placeholder="North"
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
                 <datalist id="rep-team-options">
                   {teams.map((team) => (
@@ -608,8 +602,14 @@ export function RepRoster() {
                   value={sheetUrl}
                   onChange={(event) => setSheetUrl(event.target.value)}
                   placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[11px] text-[13px] text-[var(--ink)] [transition:all_0.15s_ease] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
                 />
+                <p
+                  className="mt-2 text-[10px] text-[var(--ink-3)]"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  Make sure the sheet is set to &apos;Anyone with link can view&apos;
+                </p>
               </div>
 
               {formError ? (
@@ -621,16 +621,19 @@ export function RepRoster() {
               <button
                 type="submit"
                 disabled={isSaving}
-                className={`${syne.className} mt-1 flex w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 py-[13px] text-[14px] font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60`}
+                className={`${syne.className} mt-1 flex w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 py-[14px] text-[14px] font-semibold text-white [transition:all_0.15s_ease] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save &amp; Sync
+                {isSaving ? (
+                  <span className="animate-pulse">Syncing...</span>
+                ) : (
+                  "Save & Sync"
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={closeAddDialog}
-                className="mt-1 block w-full text-center text-[11px] text-[var(--ink-3)]"
+                className="mt-1 block w-full cursor-pointer text-center text-[11px] text-[var(--ink-3)] [transition:all_0.15s_ease] hover:text-[var(--ink-2)]"
                 style={{ fontFamily: "var(--font-mono)" }}
               >
                 Cancel
