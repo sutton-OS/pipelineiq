@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Papa from "papaparse";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { parseCommissionCSV } from "@/lib/parse-csv";
 import { Button } from "@/components/ui/button";
 
-type CsvRawRow = string[];
 type MembershipKey =
   | "Premium"
   | "Plus"
@@ -64,14 +63,28 @@ type ParsedTransactionRow = {
   inCurrentPayPeriod: boolean;
 };
 
-type ParsedCommissionData = {
+export type ParsedCommissionData = {
   payPeriods: YearTaggedPayPeriod[];
   transactionRows: ParsedTransactionRow[];
   periodLabel: string;
 };
 
-const MONTH_HEADER_PATTERN =
-  /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$/i;
+type SyncNowResult = {
+  parsedData: ParsedCommissionData;
+  fileName?: string;
+  lastSyncedAt?: Date | string;
+};
+
+type ReportUploaderProps = {
+  initialParsedData?: ParsedCommissionData | null;
+  initialFileName?: string;
+  initialLastSyncedAt?: Date | string | null;
+  repName?: string;
+  showUploadControls?: boolean;
+  breadcrumb?: ReactNode;
+  syncButtonLabel?: string;
+  onSyncNow?: () => Promise<SyncNowResult>;
+};
 
 const MEMBERSHIP_ORDER: MembershipKey[] = [
   "Premium",
@@ -105,17 +118,6 @@ function buildEmptyMembershipCounts(): Record<MembershipKey, number> {
   };
 }
 
-function parseCommission(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return 0;
-
-  const cleaned = value.replace(/[^0-9.-]/g, "");
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-const DATE_LIKE_VALUE_PATTERN = /^\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?$/;
-
 const TRAINER_NAME_NORMALIZATION: Record<string, string> = {
   sariah: "Sariah",
   sairah: "Sariah",
@@ -127,46 +129,6 @@ const TRAINER_NAME_NORMALIZATION: Record<string, string> = {
   maddie: "Maddie",
 };
 
-function parseCurrencyCell(value: string) {
-  return parseCommission(value.replace(/"/g, ""));
-}
-
-function extractDollarValues(text: string) {
-  const matches = text.match(/\$\s*-?[\d,]+(?:\.\d+)?/g) ?? [];
-  return matches
-    .map((match) => Number.parseFloat(match.replace(/[^0-9.-]/g, "")))
-    .filter((value) => Number.isFinite(value));
-}
-
-function parseUnitsCell(value: string) {
-  const cleaned = value.replace(/[^0-9.-]/g, "");
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function parseBonusFromPayPeriodRow(row: string[]) {
-  const bonusCells = [row[7] ?? "", row[8] ?? ""];
-
-  for (const cell of bonusCells) {
-    if (!cell.includes("$")) continue;
-    const values = extractDollarValues(cell);
-    for (const amount of values) {
-      if (amount > 0) return amount;
-    }
-  }
-
-  return 0;
-}
-
-function parsePayPeriodSummary(row: string[], index: number): PayPeriod {
-  const label = (row[0] ?? "").trim() || `Period ${index + 1}`;
-  const amount = parseCurrencyCell(row[5] ?? "");
-  const units = parseUnitsCell(row[6] ?? "");
-  const bonus = parseBonusFromPayPeriodRow(row);
-
-  return { label, amount, units, bonus };
-}
-
 function detectYearFromLabel(label: string) {
   if (label.includes("2026") || /\/26\b/.test(label)) return 2026;
   if (label.includes("2025") || /\/25\b/.test(label)) return 2025;
@@ -176,107 +138,10 @@ function detectYearFromLabel(label: string) {
   return null;
 }
 
-function getCurrentPayPeriodRange() {
-  const today = new Date();
-  const day = today.getDate();
-  const month = today.toLocaleString("en-US", { month: "long" });
-  const year = today.getFullYear();
-
-  let periodLabel = "";
-  let periodStart: Date;
-  let periodEnd: Date;
-
-  if (day <= 15) {
-    periodLabel = `${month} 1 – 15, ${year}`;
-    periodStart = new Date(year, today.getMonth(), 1);
-    periodEnd = new Date(year, today.getMonth(), 15);
-  } else {
-    const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
-    periodLabel = `${month} 16 – ${lastDay}, ${year}`;
-    periodStart = new Date(year, today.getMonth(), 16);
-    periodEnd = new Date(year, today.getMonth() + 1, 0);
-  }
-
-  return { periodLabel, periodStart, periodEnd };
-}
-
-function parseTransactionDate(value: string, fallbackYear: number) {
-  const trimmed = value.trim().replace(/"/g, "");
-  if (!trimmed) return null;
-
-  const numericDate = trimmed.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/);
-  if (numericDate) {
-    const month = Number.parseInt(numericDate[1], 10);
-    const day = Number.parseInt(numericDate[2], 10);
-    const yearToken = numericDate[3];
-    const year = yearToken
-      ? yearToken.length === 2
-        ? 2000 + Number.parseInt(yearToken, 10)
-        : Number.parseInt(yearToken, 10)
-      : fallbackYear;
-
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && Number.isFinite(year)) {
-      const candidate = new Date(year, month - 1, day);
-      if (
-        candidate.getFullYear() === year &&
-        candidate.getMonth() === month - 1 &&
-        candidate.getDate() === day
-      ) {
-        return candidate;
-      }
-    }
-  }
-
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-}
-
-function looksLikeMonthHeader(firstColumn: string) {
-  return MONTH_HEADER_PATTERN.test(firstColumn.trim());
-}
-
-function looksLikeHeaderRow(row: string[]) {
-  const first = (row[0] ?? "").toLowerCase();
-  const second = (row[1] ?? "").toLowerCase();
-  return first.includes("date") && second.includes("member");
-}
-
-function isPaySummaryRow(row: string[]) {
-  const col0 = (row[0] ?? "").trim();
-  const col5 = (row[5] ?? "").trim().replace(/"/g, "");
-  const col6Units = parseUnitsCell(row[6] ?? "");
-  return col0.toLowerCase().includes("pay") || (col0 === "" && col5.startsWith("$") && col6Units > 0);
-}
-
-function isValidMemberName(value: string) {
-  const trimmed = value.trim();
-  if (trimmed === "") return false;
-  if (DATE_LIKE_VALUE_PATTERN.test(trimmed)) return false;
-  return /[a-z]/i.test(trimmed);
-}
-
-function looksLikeTrainerName(value: string) {
-  const trimmed = value.trim();
-  if (trimmed === "") return false;
-  if (DATE_LIKE_VALUE_PATTERN.test(trimmed)) return false;
-  return /[a-z]/i.test(trimmed);
-}
-
 function normalizeTrainerName(value: string) {
   const cleaned = value.trim().replace(/\s+/g, " ");
   const normalized = TRAINER_NAME_NORMALIZATION[cleaned.toLowerCase()];
   return normalized ?? cleaned;
-}
-
-function categorizeMembership(value: string): MembershipKey {
-  const normalized = value.toLowerCase();
-  if (normalized.includes("premium")) return "Premium";
-  if (normalized.includes("plus")) return "Plus";
-  if (normalized.includes("fao")) return "FAO";
-  if (normalized.includes("corporate")) return "Corporate";
-  if (normalized.includes("upgrade")) return "Upgrade";
-  return "Other";
 }
 
 function formatCurrency(value: number) {
@@ -384,76 +249,6 @@ function buildSmoothLinePath(points: Array<{ x: number; y: number }>) {
     .join(" ");
 }
 
-function parseCommissionData(rawRows: CsvRawRow[]) {
-  const payPeriods: YearTaggedPayPeriod[] = [];
-  const transactionRows: ParsedTransactionRow[] = [];
-  const { periodLabel, periodStart, periodEnd } = getCurrentPayPeriodRange();
-
-  let headerSkipped = false;
-  let scanYear = 2025;
-  const currentCalendarYear = new Date().getFullYear();
-  const periodStartTime = periodStart.getTime();
-  const periodEndTime = periodEnd.getTime();
-
-  for (const rawRow of rawRows) {
-    const row = rawRow.map((cell) => String(cell ?? "").trim());
-    if (row.every((cell) => cell === "")) continue;
-
-    const firstColumn = row[0] ?? "";
-
-    if (!headerSkipped && looksLikeHeaderRow(row)) {
-      headerSkipped = true;
-      continue;
-    }
-
-    if (looksLikeMonthHeader(firstColumn)) continue;
-
-    if (isPaySummaryRow(row)) {
-      const period = parsePayPeriodSummary(row, payPeriods.length);
-      const periodYear = detectYearFromLabel(period.label);
-      if (periodYear !== null) scanYear = periodYear;
-      if (period.amount > 0 || period.bonus > 0 || period.units > 0) {
-        payPeriods.push({ ...period, year: periodYear });
-      }
-      continue;
-    }
-
-    const memberName = row[1] ?? "";
-    const membershipTypeRaw = row[2] ?? "";
-    const trainer = row[4] ?? "";
-    const commissionRaw = row[5] ?? "";
-    if (!isValidMemberName(memberName)) continue;
-
-    const commission = parseCommission(commissionRaw);
-    const units = parseUnitsCell(row[6] ?? "");
-    const fallbackRowYear = scanYear;
-    const transactionDate = parseTransactionDate(firstColumn, fallbackRowYear);
-    const transactionTime = transactionDate?.getTime();
-    const rowYear = transactionDate ? transactionDate.getFullYear() : fallbackRowYear;
-    const inCurrentPayPeriod =
-      rowYear === currentCalendarYear &&
-      transactionTime !== undefined &&
-      transactionTime >= periodStartTime &&
-      transactionTime <= periodEndTime;
-
-    transactionRows.push({
-      year: rowYear,
-      commission,
-      units,
-      membershipType: categorizeMembership(membershipTypeRaw),
-      trainerName: trainer.trim(),
-      hasTrainer: looksLikeTrainerName(trainer),
-      inCurrentPayPeriod,
-    });
-  }
-
-  return {
-    payPeriods,
-    transactionRows,
-    periodLabel,
-  } satisfies ParsedCommissionData;
-}
-
 function buildCommissionReport(data: ParsedCommissionData, selectedYear: number) {
   const membershipCounts = buildEmptyMembershipCounts();
   const trainerMap = new Map<string, TrainerCount>();
@@ -536,18 +331,32 @@ function buildCommissionReport(data: ParsedCommissionData, selectedYear: number)
   } satisfies CommissionReport;
 }
 
-export function ReportUploader() {
+export function ReportUploader({
+  initialParsedData = null,
+  initialFileName = "",
+  initialLastSyncedAt = null,
+  repName = "Tyler",
+  showUploadControls = true,
+  breadcrumb,
+  syncButtonLabel = "Sync from Google Sheets",
+  onSyncNow,
+}: ReportUploaderProps = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportExportRef = useRef<HTMLDivElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [fileName, setFileName] = useState(initialFileName);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(() => {
+    if (!initialLastSyncedAt) return null;
+    const parsed =
+      initialLastSyncedAt instanceof Date ? initialLastSyncedAt : new Date(initialLastSyncedAt);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  });
   const [parseError, setParseError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(initialParsedData);
   const [darkMode, setDarkMode] = useState(() => {
     try {
       const savedPreference = localStorage.getItem("piq-dark");
@@ -556,6 +365,26 @@ export function ReportUploader() {
       return true;
     }
   });
+
+  useEffect(() => {
+    if (initialParsedData !== undefined) {
+      setParsedData(initialParsedData);
+    }
+  }, [initialParsedData]);
+
+  useEffect(() => {
+    setFileName(initialFileName);
+  }, [initialFileName]);
+
+  useEffect(() => {
+    if (!initialLastSyncedAt) {
+      setLastSyncedAt(null);
+      return;
+    }
+    const parsed =
+      initialLastSyncedAt instanceof Date ? initialLastSyncedAt : new Date(initialLastSyncedAt);
+    setLastSyncedAt(Number.isNaN(parsed.getTime()) ? null : parsed);
+  }, [initialLastSyncedAt]);
 
   const availableYears = useMemo(() => {
     if (!parsedData) return [];
@@ -1640,7 +1469,7 @@ export function ReportUploader() {
     </div>
     <div>
       <div class="report-title">Commission Report</div>
-      <div class="report-period">Tyler &middot; GGIF &middot; ${escapeHtml(periodRangeLabel)}</div>
+      <div class="report-period">${escapeHtml(repName)} &middot; GGIF &middot; ${escapeHtml(periodRangeLabel)}</div>
     </div>
   </div>
 
@@ -1917,12 +1746,12 @@ export function ReportUploader() {
 
   <div class="report-footer">
     <div class="footer-brand">Pipeline<span>IQ</span></div>
-    <div class="footer-note">Generated ${generatedDate} &middot; Tyler &middot; GGIF Commissions</div>
+    <div class="footer-note">Generated ${generatedDate} &middot; ${escapeHtml(repName)} &middot; GGIF Commissions</div>
   </div>
 </div>`;
-  }, [report, selectedYear]);
+  }, [report, repName, selectedYear]);
 
-  function parseFile(file: File, onSuccess?: () => void) {
+  async function parseFile(file: File, onSuccess?: () => void) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setParseError("Please upload a .csv file.");
       setParsedData(null);
@@ -1932,39 +1761,31 @@ export function ReportUploader() {
 
     setParseError(null);
 
-    Papa.parse<CsvRawRow>(file, {
-      header: false,
-      skipEmptyLines: false,
-      complete: (results) => {
-        const rawRows = (results.data ?? []).filter((row) => Array.isArray(row));
+    try {
+      const csvText = await file.text();
+      const parsed = await parseCommissionCSV(csvText);
+      const hasPositiveSales = parsed.transactionRows.some((row) => row.commission > 0);
 
-        if (rawRows.length === 0) {
-          setParseError("No valid rows found in this CSV.");
-          setParsedData(null);
-          setFileName("");
-          return;
-        }
-
-        const parsed = parseCommissionData(rawRows);
-        const hasPositiveSales = parsed.transactionRows.some((row) => row.commission > 0);
-
-        if (!hasPositiveSales && parsed.payPeriods.length === 0) {
-          setParseError("No commission data found after applying parsing rules.");
-          setParsedData(null);
-          setFileName("");
-          return;
-        }
-
-        setParsedData(parsed);
-        setFileName(file.name);
-        onSuccess?.();
-      },
-      error: (error) => {
-        setParseError(`Unable to parse CSV: ${error.message}`);
+      if (!hasPositiveSales && parsed.payPeriods.length === 0) {
+        setParseError("No commission data found after applying parsing rules.");
         setParsedData(null);
         setFileName("");
-      },
-    });
+        return;
+      }
+
+      setParsedData(parsed);
+      setFileName(file.name);
+      onSuccess?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message === "No valid rows found in this CSV.") {
+        setParseError(message);
+      } else {
+        setParseError(`Unable to parse CSV: ${message}`);
+      }
+      setParsedData(null);
+      setFileName("");
+    }
   }
 
   function onDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -1980,25 +1801,41 @@ export function ReportUploader() {
     if (file) parseFile(file);
   }
 
-  async function syncFromGoogleSheets() {
+  async function syncReportData() {
     if (isSyncing) return;
 
     setIsSyncing(true);
     setParseError(null);
 
     try {
-      const response = await fetch(GOOGLE_SHEETS_SYNC_URL);
+      if (onSyncNow) {
+        const synced = await onSyncNow();
+        setParsedData(synced.parsedData);
+        if (synced.fileName) setFileName(synced.fileName);
 
-      if (!response.ok) {
-        throw new Error(`Unable to fetch sheet: ${response.status}`);
+        if (synced.lastSyncedAt) {
+          const parsed =
+            synced.lastSyncedAt instanceof Date
+              ? synced.lastSyncedAt
+              : new Date(synced.lastSyncedAt);
+          setLastSyncedAt(Number.isNaN(parsed.getTime()) ? new Date() : parsed);
+        } else {
+          setLastSyncedAt(new Date());
+        }
+        return;
       }
+
+      const response = await fetch(GOOGLE_SHEETS_SYNC_URL);
+      if (!response.ok) throw new Error(`Unable to fetch sheet: ${response.status}`);
 
       const csvText = await response.text();
       const syncedFile = new File([csvText], "google-sheets-sync.csv", { type: "text/csv" });
-      parseFile(syncedFile, () => setLastSyncedAt(new Date()));
-    } catch {
+      await parseFile(syncedFile, () => setLastSyncedAt(new Date()));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
       setParseError(
-        "Could not access sheet. Make sure it's set to 'Anyone with the link can view' in Google Sheets sharing settings."
+        message ||
+          "Could not access sheet. Make sure it's set to 'Anyone with the link can view' in Google Sheets sharing settings."
       );
     } finally {
       setIsSyncing(false);
@@ -2109,18 +1946,11 @@ export function ReportUploader() {
     >
       <div className="mx-auto w-full max-w-[960px] space-y-6">
         <div className="rounded-2xl border border-[#d8d5ce] bg-white p-6 shadow-[0_16px_36px_rgba(15,15,15,0.06)]">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={onInputChange}
-          />
-
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            {breadcrumb ? <div className="text-sm text-[#464646]">{breadcrumb}</div> : <span />}
             <Button
               type="button"
-              onClick={syncFromGoogleSheets}
+              onClick={syncReportData}
               disabled={isSyncing}
               className="h-10 border border-[#2f2f2f] bg-[#0f0f0f] px-4 text-sm font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
             >
@@ -2130,62 +1960,74 @@ export function ReportUploader() {
                   Syncing...
                 </>
               ) : (
-                "Sync from Google Sheets"
+                syncButtonLabel
               )}
             </Button>
-
-            {lastSyncedAt ? (
-              <p className="text-sm text-[#5b5b5b]">
-                Last synced:{" "}
-                {lastSyncedAt.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </p>
-            ) : null}
           </div>
 
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={(event) => {
-              event.preventDefault();
-              setIsDragging(false);
-            }}
-            onDrop={onDrop}
-            className={`rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
-              isDragging
-                ? "border-[#1a6e3c] bg-[#edf7f1]"
-                : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
-            }`}
-          >
-            <div className="mx-auto flex max-w-md flex-col items-center">
-              <Upload className="h-12 w-12 text-[#1a1a1a]" />
-              <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
-              <p className="mt-2 text-sm text-[#5b5b5b]">
-                We parse commission summaries and render a styled report
-              </p>
-              <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
-                .csv only
-              </span>
-            </div>
-          </div>
+          {lastSyncedAt ? (
+            <p className="mb-4 text-sm text-[#5b5b5b]">
+              Last synced:{" "}
+              {lastSyncedAt.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </p>
+          ) : null}
+
+          {showUploadControls ? (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={onInputChange}
+              />
+
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                }}
+                onDrop={onDrop}
+                className={`rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+                  isDragging
+                    ? "border-[#1a6e3c] bg-[#edf7f1]"
+                    : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
+                }`}
+              >
+                <div className="mx-auto flex max-w-md flex-col items-center">
+                  <Upload className="h-12 w-12 text-[#1a1a1a]" />
+                  <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
+                  <p className="mt-2 text-sm text-[#5b5b5b]">
+                    We parse commission summaries and render a styled report
+                  </p>
+                  <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
+                    .csv only
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : null}
 
           {fileName ? (
             <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d8d5ce] bg-white px-3 py-1.5 text-sm text-[#404040]">
