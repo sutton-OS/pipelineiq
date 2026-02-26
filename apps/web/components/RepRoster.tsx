@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Syne } from "next/font/google";
 import {
   useEffect,
   useMemo,
@@ -8,25 +9,15 @@ import {
   type CSSProperties,
   type FormEvent,
 } from "react";
-import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { repsStore, type Rep } from "@/lib/reps-store";
 import { fetchAndParseSheet, getRepStats, parseStoredRepData } from "@/lib/rep-sync";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
 
 const YEAR_OPTIONS = [2025, 2026] as const;
 
@@ -49,6 +40,9 @@ const shellVars = {
   "--ink-3": "var(--ink-3)",
 } as CSSProperties;
 
+const cardHoverTransition = {
+  transition: "background 0.2s ease",
+} as CSSProperties;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -96,7 +90,6 @@ export function RepRoster() {
   const [viewMode, setViewMode] = useState<RosterView>("team");
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingRepId, setEditingRepId] = useState<string | null>(null);
   const [repName, setRepName] = useState("");
   const [teamName, setTeamName] = useState("");
   const [sheetUrl, setSheetUrl] = useState("");
@@ -115,6 +108,20 @@ export function RepRoster() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDialogOpen(false);
+        setFormError(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeydown);
+    return () => window.removeEventListener("keydown", onKeydown);
+  }, [dialogOpen]);
 
   const teams = useMemo(() => {
     const seen = new Set<string>();
@@ -188,7 +195,6 @@ export function RepRoster() {
   }, [sortedReps]);
 
   function resetForm() {
-    setEditingRepId(null);
     setRepName("");
     setTeamName("");
     setSheetUrl("");
@@ -200,13 +206,9 @@ export function RepRoster() {
     setDialogOpen(true);
   }
 
-  function openEditDialog(rep: RepCardData) {
-    setEditingRepId(rep.id);
-    setRepName(rep.name);
-    setTeamName(rep.team);
-    setSheetUrl(rep.sheetUrl);
+  function closeAddDialog() {
+    setDialogOpen(false);
     setFormError(null);
-    setDialogOpen(true);
   }
 
   async function handleSaveAndSync(event: FormEvent<HTMLFormElement>) {
@@ -227,11 +229,10 @@ export function RepRoster() {
 
     try {
       const parsed = await fetchAndParseSheet(nextSheetUrl);
-      const repId = editingRepId ?? buildRepId();
       const nowIso = new Date().toISOString();
 
       repsStore.save({
-        id: repId,
+        id: buildRepId(),
         name: nextName,
         team: nextTeam,
         sheetUrl: nextSheetUrl,
@@ -240,9 +241,9 @@ export function RepRoster() {
       });
 
       setReps(repsStore.getAll());
-      setDialogOpen(false);
+      closeAddDialog();
       resetForm();
-      toast.success(editingRepId ? "Rep updated and synced." : "Rep added and synced.");
+      toast.success("Rep added and synced.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to sync sheet.";
       setFormError(message);
@@ -271,13 +272,6 @@ export function RepRoster() {
     }
   }
 
-  function handleDelete(rep: RepCardData) {
-    const confirmed = window.confirm(`Delete ${rep.name}? This cannot be undone.`);
-    if (!confirmed) return;
-    repsStore.delete(rep.id);
-    setReps(repsStore.getAll());
-  }
-
   function renderRepCard(rep: RepCardData) {
     const isSyncing = syncingRepId === rep.id;
     const commissionBarPercent =
@@ -286,76 +280,97 @@ export function RepRoster() {
     return (
       <article
         key={rep.id}
-        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+        style={cardHoverTransition}
+        className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-7 py-6 hover:bg-[var(--surface-2)]"
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <h3 className={`${syne.className} text-[15px] font-bold text-[var(--ink)]`}>
+            {rep.name}
+          </h3>
+          <span
+            className="inline-flex rounded-[99px] border border-[var(--border)] bg-[var(--surface-2)] px-[10px] py-[3px] text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {rep.teamLabel}
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-5">
           <div>
-            <h3 className="text-lg font-semibold text-[var(--ink)]">{rep.name}</h3>
-            <span className="mt-1 inline-flex rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] text-[var(--ink-2)]">
-              {rep.teamLabel}
-            </span>
+            <p
+              className="text-[16px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              {formatCurrency(rep.stats.commission)}
+            </p>
+            <p
+              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Commission
+            </p>
           </div>
-          <p className="text-right text-[11px] text-[var(--ink-3)]">
-            Last synced
-            <br />
-            {formatSyncedTime(rep.lastSynced)}
-          </p>
+          <div>
+            <p
+              className="text-[16px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              {formatUnits(rep.stats.units)}
+            </p>
+            <p
+              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Units
+            </p>
+          </div>
+          <div>
+            <p
+              className="text-[16px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              {formatPercent(rep.stats.fpRate)}
+            </p>
+            <p
+              className="mt-2 text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              FP Rate
+            </p>
+          </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-            <p className="text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]">Commission</p>
-            <p className="font-mono text-sm text-[var(--ink)]">{formatCurrency(rep.stats.commission)}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-            <p className="text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]">Units</p>
-            <p className="font-mono text-sm text-[var(--ink)]">{formatUnits(rep.stats.units)}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-            <p className="text-[10px] uppercase tracking-[0.08em] text-[var(--ink-3)]">FP Rate</p>
-            <p className="font-mono text-sm text-[var(--ink)]">{formatPercent(rep.stats.fpRate)}</p>
-          </div>
-        </div>
-
-        <div className="mt-3 h-1.5 rounded-full bg-[var(--surface-2)]">
+        <div className="mt-5 h-1 overflow-hidden rounded-[99px] bg-[var(--border)]">
           <div
-            className="h-full rounded-full bg-[var(--accent)] transition-all duration-200"
+            className="h-full rounded-[99px] bg-[var(--accent)]"
             style={{ width: `${commissionBarPercent}%` }}
           />
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link
-            href={`/manager/${rep.id}`}
-            className="inline-flex h-8 items-center rounded-md border border-[var(--border)] px-3 text-xs font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-2)]"
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/manager/${rep.id}`}
+              className={`${syne.className} inline-flex items-center rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-4 py-[7px] text-[13px] text-[var(--ink)] transition-colors hover:bg-[var(--surface)]`}
+            >
+              View Report
+            </Link>
+            <button
+              type="button"
+              onClick={() => void handleSync(rep)}
+              disabled={isSyncing}
+              className={`${syne.className} inline-flex items-center gap-1.5 rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-4 py-[7px] text-[13px] text-[var(--ink)] transition-colors hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Sync
+            </button>
+          </div>
+          <p
+            className="text-[10px] text-[var(--ink-3)]"
+            style={{ fontFamily: "var(--font-mono)" }}
           >
-            View Report
-          </Link>
-          <button
-            type="button"
-            onClick={() => void handleSync(rep)}
-            disabled={isSyncing}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Sync
-          </button>
-          <button
-            type="button"
-            onClick={() => openEditDialog(rep)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-2)]"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(rep)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-medium text-red-300 transition-colors hover:bg-[rgba(255,0,0,0.08)]"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </button>
+            {formatSyncedTime(rep.lastSynced)}
+          </p>
         </div>
       </article>
     );
@@ -364,29 +379,40 @@ export function RepRoster() {
   return (
     <div
       style={shellVars}
-      className="min-h-[calc(100vh-65px)] bg-[var(--bg)] px-6 py-6 text-[var(--ink)] md:px-8"
+      className="min-h-[calc(100vh-65px)] bg-[var(--bg)] px-5 py-8 text-[var(--ink)] md:px-8"
     >
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-col gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto max-w-[1180px]">
+        <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.08em] text-[var(--ink-3)]">Manager View</p>
-            <h1 className="text-2xl font-semibold tracking-tight">Team Dashboard</h1>
+            <p
+              className="mb-2 text-[10px] uppercase tracking-[0.15em] text-[var(--ink-3)]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              MANAGER VIEW
+            </p>
+            <h1
+              className="text-[48px] leading-[1] text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)", letterSpacing: "-1.5px" }}
+            >
+              Team Dashboard
+            </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex overflow-hidden rounded-md border border-[var(--border)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-[6px] bg-transparent">
               {YEAR_OPTIONS.map((year) => {
-                const active = selectedYear === year;
+                const isActive = selectedYear === year;
                 return (
                   <button
                     key={year}
                     type="button"
                     onClick={() => setSelectedYear(year)}
-                    className={`px-4 py-2 text-xs font-medium ${
-                      active
-                        ? "bg-[var(--ink)] text-[var(--bg)]"
-                        : "bg-transparent text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
-                    }`}
+                    className="rounded-[6px] px-[14px] py-[6px] text-[12px] transition-colors"
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      background: isActive ? "var(--ink)" : "var(--surface-2)",
+                      color: isActive ? "#ffffff" : "var(--ink-3)",
+                    }}
                   >
                     {year}
                   </button>
@@ -397,95 +423,113 @@ export function RepRoster() {
             <button
               type="button"
               onClick={openAddDialog}
-              className="inline-flex h-9 items-center rounded-md bg-[var(--ink)] px-4 text-sm font-medium text-[var(--bg)] transition-opacity hover:opacity-90"
+              className={`${syne.className} rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white`}
             >
               Add Rep
             </button>
           </div>
         </header>
 
-        <section className="mb-6 flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div className="inline-flex overflow-hidden rounded-md border border-[var(--border)]">
-            <button
-              type="button"
-              onClick={() => setViewMode("team")}
-              className={`px-3 py-2 text-xs font-medium ${
-                viewMode === "team"
-                  ? "bg-[var(--ink)] text-[var(--bg)]"
-                  : "bg-transparent text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
-              }`}
-            >
-              By Team
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("all")}
-              className={`px-3 py-2 text-xs font-medium ${
-                viewMode === "all"
-                  ? "bg-[var(--ink)] text-[var(--bg)]"
-                  : "bg-transparent text-[var(--ink-2)] hover:bg-[var(--surface-2)]"
-              }`}
-            >
-              All Reps
-            </button>
-          </div>
+        <section className="mb-7 border-b border-[var(--border)]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => setViewMode("team")}
+                className={`${syne.className} px-4 py-[10px] text-[13px] ${
+                  viewMode === "team"
+                    ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
+                    : "border-b-2 border-transparent text-[var(--ink-3)]"
+                }`}
+              >
+                By Team
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("all")}
+                className={`${syne.className} px-4 py-[10px] text-[13px] ${
+                  viewMode === "all"
+                    ? "border-b-2 border-[var(--accent)] font-semibold text-[var(--ink)]"
+                    : "border-b-2 border-transparent text-[var(--ink-3)]"
+                }`}
+              >
+                All Reps
+              </button>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <label className="text-xs uppercase tracking-[0.08em] text-[var(--ink-3)]">Sort</label>
-            <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
-              <SelectTrigger className="w-[200px] border-[var(--border)] bg-[var(--surface-2)] text-[var(--ink)]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]">
-                <SelectItem value="commission">Most commission</SelectItem>
-                <SelectItem value="units">Most units</SelectItem>
-                <SelectItem value="fpRate">Best FP rate</SelectItem>
-                <SelectItem value="name">Name A-Z</SelectItem>
-                <SelectItem value="lastSynced">Last synced</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="mb-2 flex items-center gap-2">
+              <label
+                htmlFor="sort-reps"
+                className="text-[10px] uppercase tracking-[0.12em] text-[var(--ink-3)]"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                SORT
+              </label>
+              <select
+                id="sort-reps"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as SortOption)}
+                className={`${syne.className} rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-[7px] text-[12px] text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none`}
+              >
+                <option value="commission">Most commission</option>
+                <option value="units">Most units</option>
+                <option value="fpRate">Best FP rate</option>
+                <option value="name">Name A-Z</option>
+                <option value="lastSynced">Last synced</option>
+              </select>
+            </div>
           </div>
         </section>
 
         {sortedReps.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] px-6 py-12 text-center">
-            <p className="text-lg font-medium text-[var(--ink)]">No reps yet</p>
-            <p className="mt-1 text-sm text-[var(--ink-3)]">
+          <div className="rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] px-8 py-[60px] text-center">
+            <p
+              className="text-[48px] leading-none text-[var(--ink-3)]"
+              style={{ fontFamily: "var(--font-serif)" }}
+            >
+              +
+            </p>
+            <p
+              className="mt-4 text-[24px] text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)" }}
+            >
+              No reps yet
+            </p>
+            <p className={`${syne.className} mx-auto mt-3 max-w-[460px] text-[13px] font-normal text-[var(--ink-3)]`}>
               Add your first rep and sync a Google Sheet to populate the roster.
             </p>
+            <button
+              type="button"
+              onClick={openAddDialog}
+              className={`${syne.className} mt-6 rounded-[6px] border-0 bg-[var(--accent)] px-5 py-[9px] text-[13px] font-semibold text-white`}
+            >
+              Add your first rep &rarr;
+            </button>
           </div>
         ) : viewMode === "all" ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{sortedReps.map(renderRepCard)}</div>
+          <div className="grid gap-4 lg:grid-cols-2">{sortedReps.map(renderRepCard)}</div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-7">
             {groupedByTeam.map((group) => (
-              <section key={group.team} className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-base font-semibold text-[var(--ink)]">{group.team}</h2>
-                    <Link
-                      href={`/manager/teams/${encodeURIComponent(group.team)}`}
-                      className="inline-flex h-7 items-center rounded-md border border-[var(--border)] px-2.5 text-[11px] font-medium text-[var(--ink-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+              <section key={group.team}>
+                <div className="mb-4 flex items-center gap-4">
+                  <div className="shrink-0">
+                    <h2
+                      className={`${syne.className} text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--ink)]`}
                     >
-                      Team Summary
-                    </Link>
+                      {group.team}
+                    </h2>
+                    <p
+                      className="mt-1 text-[11px] text-[var(--ink-3)]"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      {group.members.length} reps &middot; {formatCurrency(group.teamCommission)} total &middot;{" "}
+                      {formatPercent(group.averageFpRate)} avg FP
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-[var(--ink-2)]">
-                    <span>
-                      Team commission:{" "}
-                      <strong className="font-mono text-[var(--ink)]">
-                        {formatCurrency(group.teamCommission)}
-                      </strong>
-                    </span>
-                    <span>
-                      Avg FP rate:{" "}
-                      <strong className="font-mono text-[var(--ink)]">
-                        {formatPercent(group.averageFpRate)}
-                      </strong>
-                    </span>
-                  </div>
+                  <div className="h-px flex-1 bg-[var(--border)]" />
                 </div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 lg:grid-cols-2">
                   {group.members.map(renderRepCard)}
                 </div>
               </section>
@@ -494,88 +538,107 @@ export function RepRoster() {
         )}
       </div>
 
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setFormError(null);
-        }}
-      >
-        <DialogContent
-          className="border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] sm:max-w-[520px]"
+      {dialogOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.7)] p-5"
+          onClick={closeAddDialog}
         >
-          <DialogHeader>
-            <DialogTitle>{editingRepId ? "Edit Rep" : "Add Rep"}</DialogTitle>
-            <DialogDescription className="text-[var(--ink-2)]">
-              Save rep details and sync from the sheet&apos;s CSV export.
-            </DialogDescription>
-          </DialogHeader>
+          <div
+            className="w-full max-w-[480px] rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-9"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2
+              className="text-[28px] leading-none text-[var(--ink)]"
+              style={{ fontFamily: "var(--font-serif)" }}
+            >
+              Add Rep
+            </h2>
 
-          <form className="space-y-4" onSubmit={handleSaveAndSync}>
-            <div className="space-y-1.5">
-              <label htmlFor="rep-name" className="text-xs uppercase tracking-[0.08em] text-[var(--ink-3)]">
-                Rep name
-              </label>
-              <Input
-                id="rep-name"
-                value={repName}
-                onChange={(event) => setRepName(event.target.value)}
-                placeholder="Tyler Sutton"
-                className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--ink)] placeholder:text-[var(--ink-3)]"
-              />
-            </div>
+            <form className="mt-6 space-y-4" onSubmit={handleSaveAndSync}>
+              <div>
+                <label
+                  htmlFor="rep-name"
+                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  Rep name
+                </label>
+                <input
+                  id="rep-name"
+                  value={repName}
+                  onChange={(event) => setRepName(event.target.value)}
+                  placeholder="Tyler Sutton"
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="rep-team" className="text-xs uppercase tracking-[0.08em] text-[var(--ink-3)]">
-                Team
-              </label>
-              <Input
-                id="rep-team"
-                list="rep-team-options"
-                value={teamName}
-                onChange={(event) => setTeamName(event.target.value)}
-                placeholder="North"
-                className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--ink)] placeholder:text-[var(--ink-3)]"
-              />
-              <datalist id="rep-team-options">
-                {teams.map((team) => (
-                  <option key={team} value={team} />
-                ))}
-              </datalist>
-            </div>
+              <div>
+                <label
+                  htmlFor="rep-team"
+                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  Team
+                </label>
+                <input
+                  id="rep-team"
+                  list="rep-team-options"
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
+                  placeholder="North"
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                />
+                <datalist id="rep-team-options">
+                  {teams.map((team) => (
+                    <option key={team} value={team} />
+                  ))}
+                </datalist>
+              </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="sheet-url" className="text-xs uppercase tracking-[0.08em] text-[var(--ink-3)]">
-                Google Sheets URL
-              </label>
-              <Input
-                id="sheet-url"
-                value={sheetUrl}
-                onChange={(event) => setSheetUrl(event.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--ink)] placeholder:text-[var(--ink-3)]"
-              />
-            </div>
+              <div>
+                <label
+                  htmlFor="sheet-url"
+                  className="mb-1.5 block text-[10px] uppercase tracking-[0.1em] text-[var(--ink-3)]"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  Google Sheets URL
+                </label>
+                <input
+                  id="sheet-url"
+                  value={sheetUrl}
+                  onChange={(event) => setSheetUrl(event.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className={`${syne.className} w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-[14px] py-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:border-[var(--accent)] focus:outline-none`}
+                />
+              </div>
 
-            {formError ? (
-              <p className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-                {formError}
-              </p>
-            ) : null}
+              {formError ? (
+                <p className={`${syne.className} rounded-[6px] border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-200`}>
+                  {formError}
+                </p>
+              ) : null}
 
-            <div className="flex justify-end">
               <button
                 type="submit"
                 disabled={isSaving}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--ink)] px-4 text-sm font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`${syne.className} mt-1 flex w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 py-[13px] text-[14px] font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Save &amp; Sync
               </button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+
+              <button
+                type="button"
+                onClick={closeAddDialog}
+                className="mt-1 block w-full text-center text-[11px] text-[var(--ink-3)]"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
