@@ -32,7 +32,6 @@ type TransactionRow = {
 type CardMetrics = {
   periodCommission: number;
   monthCommission: number;
-  ytdCommission: number;
   fpRate: number;
   fpSold: number;
   missedFpCommission: number;
@@ -63,19 +62,6 @@ function formatUnits(value: number) {
 
 function formatPercent(value: number) {
   return `${value.toFixed(1).replace(/\.0$/, "")}%`;
-}
-
-function formatSyncedTime(value: string) {
-  if (!value) return "synced never";
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return "synced never";
-  const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-  if (minutesAgo < 1) return "synced just now";
-  if (minutesAgo < 60) return `synced ${minutesAgo}m ago`;
-  const hours = Math.floor(minutesAgo / 60);
-  if (hours < 24) return `synced ${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `synced ${days}d ago`;
 }
 
 function formatLastSyncedStatus(value: string) {
@@ -322,13 +308,6 @@ export function RepRoster() {
         currentYear
       );
 
-      let ytdCommission = 0;
-      for (const row of transactionRows) {
-        if (row.year !== currentYear) continue;
-        const rowCommission = Number.isFinite(row.commission) ? row.commission : 0;
-        ytdCommission += rowCommission;
-      }
-
       return {
         ...rep,
         teamLabel,
@@ -337,7 +316,6 @@ export function RepRoster() {
         cardMetrics: {
           periodCommission: periodMetrics.commission,
           monthCommission: monthMetrics.commission,
-          ytdCommission,
           fpRate: periodMetrics.fpRate,
           fpSold: periodMetrics.fpSold,
           missedFpCommission: periodMetrics.missedFpCommission,
@@ -582,11 +560,9 @@ export function RepRoster() {
     toast.success("Sync complete.");
   }
 
-  function renderRepCard(rep: RepCardData) {
+  function renderRepCard(rep: RepCardData, showTeamBadge: boolean) {
     const isSyncing = syncingRepId === rep.id;
     const rank = rankByRepId.get(rep.id) ?? 0;
-    const statusTone = getRepStatusTone(rep.cardMetrics.fpRate);
-    const statusClass = getRepStatusClass(statusTone);
     const commissionBarPercent =
       highestPeriodCommission > 0
         ? Math.min((rep.cardMetrics.periodCommission / highestPeriodCommission) * 100, 100)
@@ -597,10 +573,11 @@ export function RepRoster() {
         <div className="rep-card-top">
           <div>
             <div className="rep-card-name">{rep.name}</div>
-            <div className="rep-card-badges">
-              <span className="rep-team-badge">{rep.teamLabel}</span>
-              <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
-            </div>
+            {showTeamBadge ? (
+              <div className="rep-card-badges">
+                <span className="rep-team-badge">{rep.teamLabel}</span>
+              </div>
+            ) : null}
           </div>
           <div className="rep-rank">{formatRank(rank)}</div>
         </div>
@@ -628,12 +605,10 @@ export function RepRoster() {
               className="commission-bar-fill"
               style={{
                 width: `${commissionBarPercent}%`,
-                background: statusTone === "behind" ? "var(--red)" : "var(--accent)",
               }}
             />
           </div>
         </div>
-        <div className="rep-ytd-line">YTD {formatCurrency(rep.cardMetrics.ytdCommission)}</div>
 
         <div className="rep-card-footer">
           <div className="rep-card-actions">
@@ -649,7 +624,6 @@ export function RepRoster() {
               {isSyncing ? "Syncing..." : "Sync"}
             </button>
           </div>
-          <span className="rep-synced">{formatSyncedTime(rep.lastSynced)}</span>
         </div>
       </div>
     );
@@ -929,7 +903,7 @@ export function RepRoster() {
               </div>
             ) : viewMode === "all" ? (
               <div className="team-section">
-                <div className="reps-grid">{sortedReps.map(renderRepCard)}</div>
+                <div className="reps-grid">{sortedReps.map((rep) => renderRepCard(rep, true))}</div>
               </div>
             ) : (
               groupedByTeam.map((group) => (
@@ -942,7 +916,7 @@ export function RepRoster() {
                       {formatCurrency(group.teamCommission)} total · {formatPercent(group.averageFpRate)} avg FP
                     </span>
                   </div>
-                  <div className="reps-grid">{group.members.map(renderRepCard)}</div>
+                  <div className="reps-grid">{group.members.map((rep) => renderRepCard(rep, false))}</div>
                 </div>
               ))
             )}
@@ -1623,13 +1597,6 @@ export function RepRoster() {
           border-radius: 99px;
           background: var(--accent);
           transition: width 0.8s ease;
-        }
-
-        .manager-dashboard .rep-ytd-line {
-          font-family: "DM Mono", monospace;
-          font-size: 11px;
-          color: var(--ink-3);
-          margin-bottom: 12px;
         }
 
         .manager-dashboard .rep-card-footer {
