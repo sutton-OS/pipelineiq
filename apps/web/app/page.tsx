@@ -59,7 +59,7 @@ export default function HomePage() {
         </div>
         <div className="nav-actions">
           <Button asChild size="sm" variant="outline">
-            <Link href="/dashboard">Dashboard</Link>
+            <Link href="/manager">Manager View</Link>
           </Button>
           <button type="button" className="nav-cta" onClick={scrollToId("demo")}>
             Get your report →

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { Download, Loader2, Upload } from "lucide-react";
 import { parseCommissionCSV } from "@/lib/parse-csv";
 import { Button } from "@/components/ui/button";
 
@@ -418,11 +418,39 @@ export function ReportUploader({
     return buildCommissionReport(parsedData, selectedYear);
   }, [parsedData, selectedYear]);
 
+  const isSheetConnected = Boolean(fileName);
+
+  const connectedSheetName = useMemo(() => {
+    if (!fileName) return "GGIF Commissions";
+
+    const rawName = fileName.replace(/\.[^/.]+$/, "").trim();
+    if (!rawName || rawName.toLowerCase() === "google-sheets-sync") {
+      return "GGIF Commissions";
+    }
+
+    return rawName.replace(/[-_]+/g, " ");
+  }, [fileName]);
+
+  const lastSyncedAgoLabel = useMemo(() => {
+    if (!lastSyncedAt) return null;
+
+    const elapsedMs = Date.now() - lastSyncedAt.getTime();
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 60_000) return "just now";
+
+    const elapsedMinutes = Math.floor(elapsedMs / 60_000);
+    if (elapsedMinutes < 60) {
+      return `${elapsedMinutes} min ago`;
+    }
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    return `${elapsedHours} hr ago`;
+  }, [lastSyncedAt]);
+
   useEffect(() => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap";
+      "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Syne:wght@600&display=swap";
     document.head.appendChild(link);
   }, []);
 
@@ -1939,6 +1967,34 @@ export function ReportUploader({
     }
   }
 
+  const syncButton = (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void syncReportData();
+      }}
+      disabled={isSyncing}
+      className="inline-flex h-[44px] items-center gap-2 rounded-lg border-0 bg-[#e05a20] px-5 py-[11px] text-[13px] font-semibold text-white transition-colors hover:bg-[#ff7a42] disabled:cursor-not-allowed disabled:bg-[#c94e1b] disabled:text-[#f0c6b2]"
+      style={{ fontFamily: "'Syne', sans-serif" }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        className={isSyncing ? "report-sync-icon-spin" : undefined}
+      >
+        <path d="M23 4v6h-6M1 20v-6h6" />
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+      </svg>
+      {isSyncing ? "Syncing..." : syncButtonLabel}
+    </button>
+  );
+
   return (
     <section
       className="relative min-h-screen bg-[#f7f5f0] px-4 pb-12 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
@@ -1946,35 +2002,7 @@ export function ReportUploader({
     >
       <div className="mx-auto w-full max-w-[960px] space-y-6">
         <div className="rounded-2xl border border-[#d8d5ce] bg-white p-6 shadow-[0_16px_36px_rgba(15,15,15,0.06)]">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            {breadcrumb ? <div className="text-sm text-[#464646]">{breadcrumb}</div> : <span />}
-            <Button
-              type="button"
-              onClick={syncReportData}
-              disabled={isSyncing}
-              className="h-10 border border-[#2f2f2f] bg-[#0f0f0f] px-4 text-sm font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
-            >
-              {isSyncing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                syncButtonLabel
-              )}
-            </Button>
-          </div>
-
-          {lastSyncedAt ? (
-            <p className="mb-4 text-sm text-[#5b5b5b]">
-              Last synced:{" "}
-              {lastSyncedAt.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
-              })}
-            </p>
-          ) : null}
+          {breadcrumb ? <div className="mb-4 text-sm text-[#464646]">{breadcrumb}</div> : null}
 
           {showUploadControls ? (
             <>
@@ -2009,32 +2037,95 @@ export function ReportUploader({
                   setIsDragging(false);
                 }}
                 onDrop={onDrop}
-                className={`rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+                className={`rounded-2xl border-2 border-dashed px-6 py-6 text-center transition-colors ${
                   isDragging
                     ? "border-[#1a6e3c] bg-[#edf7f1]"
-                    : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
+                    : isSheetConnected
+                      ? "border-[#3f4656] bg-[#161b23] hover:bg-[#161b23]"
+                      : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
                 }`}
               >
-                <div className="mx-auto flex max-w-md flex-col items-center">
-                  <Upload className="h-12 w-12 text-[#1a1a1a]" />
-                  <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
-                  <p className="mt-2 text-sm text-[#5b5b5b]">
-                    We parse commission summaries and render a styled report
-                  </p>
-                  <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
-                    .csv only
-                  </span>
+                <div className="mx-auto w-full max-w-[720px] text-left">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    {syncButton}
+                    {lastSyncedAgoLabel ? (
+                      <p
+                        className={`text-[11px] text-[#7b817f] ${isSheetConnected ? "text-[#9399a5]" : ""}`}
+                        style={{ fontFamily: "'DM Mono', monospace" }}
+                      >
+                        Last synced: {lastSyncedAgoLabel}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {isSheetConnected ? (
+                    <>
+                      <div className="my-4 h-px w-full bg-[rgba(255,255,255,0.12)]" />
+                      <div className="w-full rounded-[8px] border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.06)] px-4 py-[10px]">
+                        <div className="flex items-center gap-[10px]">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <rect x="3" y="2" width="18" height="20" rx="2" fill="#1a7a4a" stroke="none" />
+                            <path
+                              d="M7 8h10M7 12h10M7 16h6"
+                              stroke="white"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="truncate text-[13px] font-semibold leading-none text-white"
+                              style={{ fontFamily: "'Syne', sans-serif" }}
+                            >
+                              {connectedSheetName}
+                            </p>
+                            <p
+                              className="mt-1 text-[10px] leading-none text-[rgba(255,255,255,0.4)]"
+                              style={{ fontFamily: "'DM Mono', monospace" }}
+                            >
+                              Connected via Google Sheets
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="report-live-dot h-[6px] w-[6px] rounded-full bg-[#22c55e]" />
+                            <span
+                              className="text-[10px] leading-none text-[#22c55e]"
+                              style={{ fontFamily: "'DM Mono', monospace" }}
+                            >
+                              Live
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-8 flex flex-col items-center text-center">
+                      <Upload className="h-12 w-12 text-[#1a1a1a]" />
+                      <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
+                      <p className="mt-2 text-sm text-[#5b5b5b]">
+                        We parse commission summaries and render a styled report
+                      </p>
+                      <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
+                        .csv only
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
-          ) : null}
-
-          {fileName ? (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d8d5ce] bg-white px-3 py-1.5 text-sm text-[#404040]">
-              <FileSpreadsheet className="h-4 w-4 text-[#1a6e3c]" />
-              {fileName}
+          ) : (
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              {syncButton}
+              {lastSyncedAgoLabel ? (
+                <p
+                  className="text-[11px] text-[#7b817f]"
+                  style={{ fontFamily: "'DM Mono', monospace" }}
+                >
+                  Last synced: {lastSyncedAgoLabel}
+                </p>
+              ) : null}
             </div>
-          ) : null}
+          )}
 
           {parseError ? (
             <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -2133,6 +2224,32 @@ export function ReportUploader({
           </div>
         ) : null}
       </div>
+      <style jsx>{`
+        @keyframes reportUploaderPulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.3;
+          }
+        }
+        @keyframes reportUploaderSpin {
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        .report-live-dot {
+          animation: reportUploaderPulse 2s infinite;
+        }
+        .report-sync-icon-spin {
+          transform-origin: center;
+          animation: reportUploaderSpin 1s linear infinite;
+        }
+      `}</style>
     </section>
   );
 }
