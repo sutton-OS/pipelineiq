@@ -1997,11 +1997,11 @@ export function ReportUploader({
 
   return (
     <section
-      className="relative min-h-screen bg-transparent px-4 pb-12 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
+      className="relative px-0 pb-0 pt-0 text-[#0f0f0f]"
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       <div className="mx-auto w-full max-w-[960px] space-y-6">
-        <div className="rounded-2xl border border-[#272a33] bg-[#16181f] p-6">
+        <div className="rounded-2xl border-0 bg-transparent p-0 shadow-none">
           {breadcrumb ? <div className="mb-4 text-sm text-[#464646]">{breadcrumb}</div> : null}
 
           {showUploadControls ? (

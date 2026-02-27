@@ -445,7 +445,10 @@ export default function HomePage() {
             <div className="demo-box-url">pipelineiq.app</div>
           </div>
           <div className="demo-content">
-            <div className="demo-uploader-wrap">
+            <div
+              className="demo-uploader-wrap"
+              style={{ background: "#16181f", borderRadius: "0 0 12px 12px", padding: "24px" }}
+            >
               <ReportUploader />
             </div>
           </div>
@@ -1281,8 +1284,8 @@ export default function HomePage() {
         }
 
         .demo-box {
-          background: var(--surface);
-          border: 1px solid var(--border);
+          background: #16181f;
+          border: 1px solid #272a33;
           border-radius: 16px;
           overflow: hidden;
         }
