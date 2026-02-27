@@ -1997,11 +1997,11 @@ export function ReportUploader({
 
   return (
     <section
-      className="relative min-h-screen bg-[#f7f5f0] px-4 pb-12 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
+      className="relative min-h-screen bg-transparent px-4 pb-12 pt-8 text-[#0f0f0f] sm:px-6 lg:px-8"
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       <div className="mx-auto w-full max-w-[960px] space-y-6">
-        <div className="rounded-2xl border border-[#d8d5ce] bg-white p-6 shadow-[0_16px_36px_rgba(15,15,15,0.06)]">
+        <div className="rounded-2xl border border-[#272a33] bg-[#16181f] p-6">
           {breadcrumb ? <div className="mb-4 text-sm text-[#464646]">{breadcrumb}</div> : null}
 
           {showUploadControls ? (
@@ -2042,7 +2042,7 @@ export function ReportUploader({
                     ? "border-[#1a6e3c] bg-[#edf7f1]"
                     : isSheetConnected
                       ? "border-[#3f4656] bg-[#161b23] hover:bg-[#161b23]"
-                      : "border-[#cfcabf] bg-[#fbfaf7] hover:bg-[#f5f2eb]"
+                      : "border-[#272a33] bg-[#1e2028] hover:bg-[#23272f]"
                 }`}
               >
                 <div className="mx-auto w-full max-w-[720px] text-left">
@@ -2050,7 +2050,7 @@ export function ReportUploader({
                     {syncButton}
                     {lastSyncedAgoLabel ? (
                       <p
-                        className={`text-[11px] text-[#7b817f] ${isSheetConnected ? "text-[#9399a5]" : ""}`}
+                        className="text-[11px] text-[#4a5060]"
                         style={{ fontFamily: "'DM Mono', monospace" }}
                       >
                         Last synced: {lastSyncedAgoLabel}
@@ -2100,12 +2100,12 @@ export function ReportUploader({
                     </>
                   ) : (
                     <div className="mt-8 flex flex-col items-center text-center">
-                      <Upload className="h-12 w-12 text-[#1a1a1a]" />
-                      <p className="mt-4 text-lg font-medium">Drop your CSV transactions here</p>
-                      <p className="mt-2 text-sm text-[#5b5b5b]">
+                      <Upload className="h-12 w-12 text-[#4a5060]" />
+                      <p className="mt-4 text-lg font-medium text-[#f2f3f5]">Drop your CSV transactions here</p>
+                      <p className="mt-2 text-sm text-[#4a5060]">
                         We parse commission summaries and render a styled report
                       </p>
-                      <span className="mt-4 inline-flex items-center rounded-full bg-[#e7f2eb] px-3 py-1 text-xs font-semibold text-[#1a6e3c]">
+                      <span className="mt-4 inline-flex items-center rounded-full bg-[rgba(34,197,94,0.1)] px-3 py-1 text-xs font-semibold text-[#22c55e] border border-[rgba(34,197,94,0.2)]">
                         .csv only
                       </span>
                     </div>
