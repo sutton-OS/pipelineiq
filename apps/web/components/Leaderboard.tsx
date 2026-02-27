@@ -1,12 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FP_COMMISSION_PER_MISSED, getRepStats, parseStoredRepData } from "@/lib/rep-sync";
+import { FP_COMMISSION_PER_MISSED, parseStoredRepData } from "@/lib/rep-sync";
 import type { Rep } from "@/lib/reps-store";
 
 export type LeaderboardPeriod = "full" | "firstHalf" | "secondHalf";
 
-type SortColumn = "name" | "commission" | "units" | "fpRate" | "fpSold" | "missedFpCommission" | "vsLastPeriod" | "status";
+type SortColumn =
+  | "name"
+  | "commission"
+  | "monthCommission"
+  | "fpRate"
+  | "fpSold"
+  | "missedFpCommission"
+  | "vsLastPeriod"
+  | "status";
 type SortDirection = "asc" | "desc";
 type StatusTone = "strong" | "average" | "behind";
 type Half = "first" | "second";
@@ -25,7 +33,8 @@ type LeaderboardRow = {
   name: string;
   teamLabel: string;
   commission: number;
-  units: number;
+  monthCommission: number;
+  ytdCommission: number;
   fpRate: number;
   fpSold: number;
   missedFpCommission: number;
@@ -113,29 +122,6 @@ function formatHalfLabel(start: Date, end: Date) {
   return `${month} ${start.getDate()} \u2013 ${end.getDate()}, ${start.getFullYear()}`;
 }
 
-function parsePeriodLabelToTimestamp(label: string) {
-  const direct = Date.parse(label);
-  if (!Number.isNaN(direct)) return direct;
-
-  const monthDay = label.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
-  if (!monthDay) return Number.POSITIVE_INFINITY;
-
-  const month = Number.parseInt(monthDay[1], 10);
-  const day = Number.parseInt(monthDay[2], 10);
-  const yearToken = monthDay[3];
-  const year = yearToken
-    ? yearToken.length === 2
-      ? 2000 + Number.parseInt(yearToken, 10)
-      : Number.parseInt(yearToken, 10)
-    : new Date().getFullYear();
-
-  if (month < 1 || month > 12 || day < 1 || day > 31 || !Number.isFinite(year)) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return new Date(year, month - 1, day).getTime();
-}
-
 function getHalfMetrics(rows: TransactionRow[], start: Date, end: Date, allowFallbackCurrentPeriod: boolean): PeriodMetrics {
   let commission = 0;
   let units = 0;
@@ -192,8 +178,8 @@ function statusLabel(status: StatusTone) {
 
 const SORTED_LABEL: Record<SortColumn, string> = {
   name: "name",
-  commission: "commission",
-  units: "units",
+  commission: "this period",
+  monthCommission: "this month",
   fpRate: "fp rate",
   fpSold: "fps sold",
   missedFpCommission: "missed",
@@ -201,7 +187,7 @@ const SORTED_LABEL: Record<SortColumn, string> = {
   status: "status",
 };
 
-export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selectedYear: number; period: LeaderboardPeriod }) {
+export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: number; period: LeaderboardPeriod }) {
   const [sortColumn, setSortColumn] = useState<SortColumn>("commission");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -209,73 +195,61 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
   const currentMonthIndex = today.getMonth();
   const currentYear = today.getFullYear();
   const currentHalf: Half = today.getDate() <= 15 ? "first" : "second";
-
-  const selectedHalf: Half = period === "firstHalf" ? "first" : "second";
-  const selectedHalfRange = period === "full" ? null : getHalfRange(selectedYear, currentMonthIndex, selectedHalf);
-  const previousHalfRange = period === "full" ? null : getPreviousHalfRange(selectedYear, currentMonthIndex, selectedHalf);
+  const monthRange = useMemo(
+    () => ({
+      start: new Date(currentYear, currentMonthIndex, 1),
+      end: new Date(currentYear, currentMonthIndex + 1, 0),
+    }),
+    [currentMonthIndex, currentYear]
+  );
+  const selectedHalf: Half = period === "full" ? currentHalf : period === "firstHalf" ? "first" : "second";
+  const selectedHalfRange = useMemo(
+    () => getHalfRange(currentYear, currentMonthIndex, selectedHalf),
+    [currentMonthIndex, currentYear, selectedHalf]
+  );
+  const previousHalfRange = useMemo(
+    () => getPreviousHalfRange(currentYear, currentMonthIndex, selectedHalf),
+    [currentMonthIndex, currentYear, selectedHalf]
+  );
 
   const rows = useMemo<LeaderboardRow[]>(() => {
     const mapped = reps.map((rep) => {
       const data = parseStoredRepData(rep.data);
       const transactionRows = ((data?.transactionRows ?? []) as TransactionRow[]);
 
-      let commission = 0;
-      let units = 0;
-      let fpRate = 0;
-      let fpSold = 0;
-      let missedFpCommission = 0;
-      let vsLastPeriod = 0;
+      const allowFallbackCurrentPeriod = selectedHalf === currentHalf;
+      const currentMetrics = getHalfMetrics(
+        transactionRows,
+        selectedHalfRange.start,
+        selectedHalfRange.end,
+        allowFallbackCurrentPeriod
+      );
+      const previousMetrics = getHalfMetrics(
+        transactionRows,
+        previousHalfRange.start,
+        previousHalfRange.end,
+        false
+      );
+      const monthMetrics = getHalfMetrics(transactionRows, monthRange.start, monthRange.end, true);
 
-      if (period === "full") {
-        const stats = getRepStats(data, selectedYear);
-        commission = stats.commission;
-        units = stats.units;
-        fpRate = stats.fpRate;
-        fpSold = stats.fpSold;
-        missedFpCommission = stats.missedFpCommission;
-
-        const periodsForYear = [...(data?.payPeriods ?? [])]
-          .filter((payPeriod) => payPeriod.year === selectedYear)
-          .sort((left, right) => parsePeriodLabelToTimestamp(left.label) - parsePeriodLabelToTimestamp(right.label));
-
-        const currentPayPeriodAmount = periodsForYear.length > 0 ? periodsForYear[periodsForYear.length - 1].amount : 0;
-        const previousPayPeriodAmount = periodsForYear.length > 1 ? periodsForYear[periodsForYear.length - 2].amount : 0;
-        vsLastPeriod = currentPayPeriodAmount - previousPayPeriodAmount;
-      } else if (selectedHalfRange && previousHalfRange) {
-        const allowFallbackCurrentPeriod =
-          selectedYear === currentYear && selectedHalf === currentHalf;
-
-        const currentMetrics = getHalfMetrics(
-          transactionRows,
-          selectedHalfRange.start,
-          selectedHalfRange.end,
-          allowFallbackCurrentPeriod
-        );
-        const previousMetrics = getHalfMetrics(
-          transactionRows,
-          previousHalfRange.start,
-          previousHalfRange.end,
-          false
-        );
-
-        commission = currentMetrics.commission;
-        units = currentMetrics.units;
-        fpRate = currentMetrics.fpRate;
-        fpSold = currentMetrics.fpSold;
-        missedFpCommission = currentMetrics.missedFpCommission;
-        vsLastPeriod = currentMetrics.commission - previousMetrics.commission;
+      let ytdCommission = 0;
+      for (const row of transactionRows) {
+        if (row.year !== currentYear) continue;
+        const rowCommission = Number.isFinite(row.commission) ? row.commission : 0;
+        ytdCommission += rowCommission;
       }
 
       return {
         id: rep.id,
         name: rep.name,
         teamLabel: rep.team.trim() || "Unassigned",
-        commission,
-        units,
-        fpRate,
-        fpSold,
-        missedFpCommission,
-        vsLastPeriod,
+        commission: currentMetrics.commission,
+        monthCommission: monthMetrics.commission,
+        ytdCommission,
+        fpRate: currentMetrics.fpRate,
+        fpSold: currentMetrics.fpSold,
+        missedFpCommission: currentMetrics.missedFpCommission,
+        vsLastPeriod: currentMetrics.commission - previousMetrics.commission,
         status: "average" as StatusTone,
       };
     });
@@ -287,7 +261,7 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
       ...row,
       status: getStatusTone(row.commission, averageCommission),
     }));
-  }, [reps, period, selectedHalf, selectedHalfRange, previousHalfRange, selectedYear, currentHalf, currentYear]);
+  }, [reps, selectedHalf, selectedHalfRange, previousHalfRange, currentHalf, currentYear, monthRange]);
 
   const sortedRows = useMemo(() => {
     const sorted = [...rows];
@@ -304,8 +278,8 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
         delta = left.name.localeCompare(right.name);
       } else if (sortColumn === "commission") {
         delta = right.commission - left.commission;
-      } else if (sortColumn === "units") {
-        delta = right.units - left.units;
+      } else if (sortColumn === "monthCommission") {
+        delta = right.monthCommission - left.monthCommission;
       } else if (sortColumn === "fpRate") {
         delta = right.fpRate - left.fpRate;
       } else if (sortColumn === "fpSold") {
@@ -357,12 +331,8 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
   }, [currentHalf, currentMonthIndex, currentYear, reps, today]);
 
   const periodLabel = useMemo(() => {
-    if (period === "full") {
-      return `${selectedYear} Full Period`;
-    }
-    if (!selectedHalfRange) return "Current Period";
     return formatHalfLabel(selectedHalfRange.start, selectedHalfRange.end);
-  }, [period, selectedHalfRange, selectedYear]);
+  }, [selectedHalfRange]);
 
   const highestCommission = useMemo(
     () => sortedRows.reduce((max, row) => Math.max(max, row.commission), 0),
@@ -445,16 +415,8 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
               <div className="podium-team">{row.teamLabel}</div>
               <div className={amountClass}>{formatCurrency(row.commission)}</div>
               <div className="podium-period-label">This period</div>
-              <div className="podium-stats">
-                <div className="podium-stat">
-                  <div className="podium-stat-val">{formatPercent(row.fpRate)}</div>
-                  <div className="podium-stat-lab">FP Rate</div>
-                </div>
-                <div className="podium-stat">
-                  <div className="podium-stat-val">{formatUnits(row.fpSold)}</div>
-                  <div className="podium-stat-lab">FPs</div>
-                </div>
-              </div>
+              <div className="podium-month-value">{formatCurrency(row.monthCommission)}</div>
+              <div className="podium-month-label">This month</div>
               <div className="podium-bar">
                 <div className="podium-bar-fill" style={{ width: `${barWidth}%`, background: barColor }} />
               </div>
@@ -476,8 +438,8 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
             <tr>
               {[
                 { key: "name", label: "Rep" },
-                { key: "commission", label: "Commission" },
-                { key: "units", label: "Units" },
+                { key: "commission", label: "This Period" },
+                { key: "monthCommission", label: "This Month" },
                 { key: "fpRate", label: "FP Rate" },
                 { key: "fpSold", label: "FPs Sold" },
                 { key: "missedFpCommission", label: "Missed $" },
@@ -538,6 +500,7 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
                       >
                         {formatCurrency(row.commission)}
                       </div>
+                      <div className="val-secondary">YTD {formatCurrency(row.ytdCommission)}</div>
                       <div className="mini-bar-cell">
                         <div className="mini-bar">
                           <div
@@ -557,7 +520,7 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
                     </td>
 
                     <td>
-                      <span className="val-mono">{formatUnits(row.units)}</span>
+                      <span className="val-mono">{formatCurrency(row.monthCommission)}</span>
                     </td>
                     <td>
                       <span className="val-mono">{formatPercent(row.fpRate)}</span>
@@ -809,7 +772,23 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
           color: var(--ink-3);
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          margin-bottom: 12px;
+          margin-bottom: 8px;
+        }
+
+        .manager-dashboard .podium-month-value {
+          font-family: "DM Mono", monospace;
+          font-size: 14px;
+          color: var(--ink-2);
+          margin-bottom: 2px;
+        }
+
+        .manager-dashboard .podium-month-label {
+          font-family: "DM Mono", monospace;
+          font-size: 9px;
+          color: var(--ink-3);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 10px;
         }
 
         .manager-dashboard .podium-stats {
@@ -986,6 +965,14 @@ export function Leaderboard({ reps, selectedYear, period }: { reps: Rep[]; selec
           font-family: "Instrument Serif", serif;
           font-size: 18px;
           letter-spacing: -0.3px;
+          font-weight: 600;
+        }
+
+        .manager-dashboard .val-secondary {
+          font-family: "DM Mono", monospace;
+          font-size: 10px;
+          color: var(--ink-3);
+          margin-top: 2px;
         }
 
         .manager-dashboard .val-mono {

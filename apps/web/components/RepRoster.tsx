@@ -5,7 +5,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Leaderboard, type LeaderboardPeriod } from "@/components/Leaderboard";
 import { repsStore, type Rep } from "@/lib/reps-store";
-import { fetchAndParseSheet, getRepStats, parseStoredRepData } from "@/lib/rep-sync";
+import {
+  FP_COMMISSION_PER_MISSED,
+  fetchAndParseSheet,
+  getRepStats,
+  parseStoredRepData,
+} from "@/lib/rep-sync";
 
 const YEAR_OPTIONS = [2025, 2026] as const;
 
@@ -13,11 +18,33 @@ type SortOption = "commission" | "units" | "fpRate" | "name" | "lastSynced";
 type RosterView = "team" | "all" | "leaderboard";
 type RepStatusTone = "strong" | "average" | "behind";
 type SyncChipStatus = "pending" | "syncing" | "done" | "error";
+type Half = "first" | "second";
+
+type TransactionRow = {
+  year: number | null;
+  transactionDate?: string | null;
+  commission: number;
+  units: number;
+  hasTrainer: boolean;
+  inCurrentPayPeriod: boolean;
+};
+
+type CardMetrics = {
+  periodCommission: number;
+  monthCommission: number;
+  ytdCommission: number;
+  fpRate: number;
+  fpSold: number;
+  missedFpCommission: number;
+  periodLabel: string;
+  monthLabel: string;
+};
 
 type RepCardData = Rep & {
   teamLabel: string;
   syncedAt: number;
   stats: ReturnType<typeof getRepStats>;
+  cardMetrics: CardMetrics;
 };
 
 function formatCurrency(value: number) {
@@ -91,6 +118,81 @@ function getRepStatusClass(tone: RepStatusTone) {
 
 function formatRank(index: number) {
   return String(index + 1).padStart(2, "0");
+}
+
+function parseDay(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function inRange(date: Date, start: Date, end: Date) {
+  const time = date.getTime();
+  return time >= start.getTime() && time <= end.getTime();
+}
+
+function getHalfRange(year: number, monthIndex: number, half: Half) {
+  if (half === "first") {
+    return {
+      start: new Date(year, monthIndex, 1),
+      end: new Date(year, monthIndex, 15),
+    };
+  }
+
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  return {
+    start: new Date(year, monthIndex, 16),
+    end: new Date(year, monthIndex, lastDay),
+  };
+}
+
+function formatShortPeriodLabel(start: Date, end: Date) {
+  const month = start.toLocaleString("en-US", { month: "short" });
+  return `${month} ${start.getDate()}\u2013${end.getDate()}`;
+}
+
+function getRangeMetrics(
+  rows: TransactionRow[],
+  start: Date,
+  end: Date,
+  allowFallbackCurrentPeriod: boolean,
+  fallbackYear: number
+) {
+  let commission = 0;
+  let sales = 0;
+  let fpSold = 0;
+
+  for (const row of rows) {
+    const rowDate = parseDay(row.transactionDate ?? null);
+
+    let include = false;
+    if (rowDate) {
+      include = inRange(rowDate, start, end);
+    } else if (allowFallbackCurrentPeriod && row.inCurrentPayPeriod && row.year === fallbackYear) {
+      include = true;
+    }
+
+    if (!include) continue;
+
+    const rowCommission = Number.isFinite(row.commission) ? row.commission : 0;
+    commission += rowCommission;
+
+    if (rowCommission > 0) {
+      sales += 1;
+      if (row.hasTrainer) fpSold += 1;
+    }
+  }
+
+  const fpRate = sales > 0 ? (fpSold / sales) * 100 : 0;
+  const missedFpCommission = Math.max(sales - fpSold, 0) * FP_COMMISSION_PER_MISSED;
+
+  return {
+    commission,
+    fpRate,
+    fpSold,
+    missedFpCommission,
+  };
 }
 
 export function RepRoster() {
@@ -174,30 +276,99 @@ export function RepRoster() {
     return Array.from(seen).sort((a, b) => a.localeCompare(b));
   }, [reps]);
 
+  const today = useMemo(() => new Date(), []);
+  const currentYear = today.getFullYear();
+  const currentMonthIndex = today.getMonth();
+  const currentHalf: Half = today.getDate() <= 15 ? "first" : "second";
+  const selectedHalf: Half = leaderboardPeriod === "full" ? currentHalf : leaderboardPeriod === "firstHalf" ? "first" : "second";
+  const selectedPeriodRange = useMemo(
+    () => getHalfRange(currentYear, currentMonthIndex, selectedHalf),
+    [currentMonthIndex, currentYear, selectedHalf]
+  );
+  const currentMonthRange = useMemo(
+    () => ({
+      start: new Date(currentYear, currentMonthIndex, 1),
+      end: new Date(currentYear, currentMonthIndex + 1, 0),
+    }),
+    [currentMonthIndex, currentYear]
+  );
+  const periodLabel = useMemo(
+    () => formatShortPeriodLabel(selectedPeriodRange.start, selectedPeriodRange.end),
+    [selectedPeriodRange]
+  );
+  const monthLabel = useMemo(
+    () => selectedPeriodRange.start.toLocaleString("en-US", { month: "long" }),
+    [selectedPeriodRange]
+  );
+
   const repsWithStats = useMemo<RepCardData[]>(() => {
     return reps.map((rep) => {
       const teamLabel = rep.team.trim() || "Unassigned";
       const syncedAt = Date.parse(rep.lastSynced);
+      const parsedData = parseStoredRepData(rep.data);
+      const transactionRows = ((parsedData?.transactionRows ?? []) as TransactionRow[]);
+      const periodMetrics = getRangeMetrics(
+        transactionRows,
+        selectedPeriodRange.start,
+        selectedPeriodRange.end,
+        selectedHalf === currentHalf,
+        currentYear
+      );
+      const monthMetrics = getRangeMetrics(
+        transactionRows,
+        currentMonthRange.start,
+        currentMonthRange.end,
+        true,
+        currentYear
+      );
+
+      let ytdCommission = 0;
+      for (const row of transactionRows) {
+        if (row.year !== currentYear) continue;
+        const rowCommission = Number.isFinite(row.commission) ? row.commission : 0;
+        ytdCommission += rowCommission;
+      }
+
       return {
         ...rep,
         teamLabel,
         syncedAt: Number.isNaN(syncedAt) ? 0 : syncedAt,
-        stats: getRepStats(parseStoredRepData(rep.data), selectedYear),
+        stats: getRepStats(parsedData, selectedYear),
+        cardMetrics: {
+          periodCommission: periodMetrics.commission,
+          monthCommission: monthMetrics.commission,
+          ytdCommission,
+          fpRate: periodMetrics.fpRate,
+          fpSold: periodMetrics.fpSold,
+          missedFpCommission: periodMetrics.missedFpCommission,
+          periodLabel,
+          monthLabel,
+        },
       };
     });
-  }, [reps, selectedYear]);
+  }, [
+    reps,
+    selectedYear,
+    selectedPeriodRange,
+    selectedHalf,
+    currentHalf,
+    currentYear,
+    currentMonthRange,
+    periodLabel,
+    monthLabel,
+  ]);
 
   const sortedReps = useMemo(() => {
     const next = [...repsWithStats];
     next.sort((a, b) => {
       if (sortBy === "commission") {
-        return b.stats.commission - a.stats.commission || a.name.localeCompare(b.name);
+        return b.cardMetrics.periodCommission - a.cardMetrics.periodCommission || a.name.localeCompare(b.name);
       }
       if (sortBy === "units") {
         return b.stats.units - a.stats.units || a.name.localeCompare(b.name);
       }
       if (sortBy === "fpRate") {
-        return b.stats.fpRate - a.stats.fpRate || a.name.localeCompare(b.name);
+        return b.cardMetrics.fpRate - a.cardMetrics.fpRate || a.name.localeCompare(b.name);
       }
       if (sortBy === "lastSynced") {
         return b.syncedAt - a.syncedAt || a.name.localeCompare(b.name);
@@ -207,9 +378,17 @@ export function RepRoster() {
     return next;
   }, [repsWithStats, sortBy]);
 
-  const highestCommission = useMemo(
-    () => sortedReps.reduce((max, rep) => Math.max(max, rep.stats.commission), 0),
-    [sortedReps]
+  const repsByPeriodCommission = useMemo(() => {
+    const next = [...repsWithStats];
+    next.sort(
+      (a, b) => b.cardMetrics.periodCommission - a.cardMetrics.periodCommission || a.name.localeCompare(b.name)
+    );
+    return next;
+  }, [repsWithStats]);
+
+  const highestPeriodCommission = useMemo(
+    () => repsByPeriodCommission.reduce((max, rep) => Math.max(max, rep.cardMetrics.periodCommission), 0),
+    [repsByPeriodCommission]
   );
 
   const groupedByTeam = useMemo(() => {
@@ -226,10 +405,10 @@ export function RepRoster() {
 
     return Array.from(groups.entries())
       .map(([team, members]) => {
-        const teamCommission = members.reduce((sum, member) => sum + member.stats.commission, 0);
+        const teamCommission = members.reduce((sum, member) => sum + member.cardMetrics.periodCommission, 0);
         const averageFpRate =
           members.length > 0
-            ? members.reduce((sum, member) => sum + member.stats.fpRate, 0) / members.length
+            ? members.reduce((sum, member) => sum + member.cardMetrics.fpRate, 0) / members.length
             : 0;
         return { team, members, teamCommission, averageFpRate };
       })
@@ -258,11 +437,11 @@ export function RepRoster() {
 
   const rankByRepId = useMemo(() => {
     const ranks = new Map<string, number>();
-    sortedReps.forEach((rep, index) => {
+    repsByPeriodCommission.forEach((rep, index) => {
       ranks.set(rep.id, index);
     });
     return ranks;
-  }, [sortedReps]);
+  }, [repsByPeriodCommission]);
 
   const syncProgressPercent = useMemo(() => {
     if (reps.length === 0) return 0;
@@ -270,6 +449,7 @@ export function RepRoster() {
   }, [reps.length, syncCompletedCount]);
 
   const syncStatusLabel = useMemo(() => {
+    void timeTick;
     return formatLastSyncedStatus(lastSyncedAt || syncStartedAt || "");
   }, [lastSyncedAt, syncStartedAt, timeTick]);
 
@@ -405,10 +585,12 @@ export function RepRoster() {
   function renderRepCard(rep: RepCardData) {
     const isSyncing = syncingRepId === rep.id;
     const rank = rankByRepId.get(rep.id) ?? 0;
-    const statusTone = getRepStatusTone(rep.stats.fpRate);
+    const statusTone = getRepStatusTone(rep.cardMetrics.fpRate);
     const statusClass = getRepStatusClass(statusTone);
     const commissionBarPercent =
-      highestCommission > 0 ? Math.min((rep.stats.commission / highestCommission) * 100, 100) : 0;
+      highestPeriodCommission > 0
+        ? Math.min((rep.cardMetrics.periodCommission / highestPeriodCommission) * 100, 100)
+        : 0;
 
     return (
       <div key={rep.id} className="rep-card">
@@ -425,16 +607,18 @@ export function RepRoster() {
 
         <div className="rep-stats">
           <div className="rep-stat-item">
-            <div className="rep-stat-value">{formatCurrency(rep.stats.commission)}</div>
-            <div className="rep-stat-label">Commission</div>
+            <div className="rep-stat-value">{formatCurrency(rep.cardMetrics.periodCommission)}</div>
+            <div className="rep-stat-label">This period</div>
+            <div className="rep-stat-sub">{rep.cardMetrics.periodLabel}</div>
           </div>
           <div className="rep-stat-item">
-            <div className="rep-stat-value">{formatUnits(rep.stats.fpSold)}</div>
-            <div className="rep-stat-label">FPs Sold</div>
+            <div className="rep-stat-value">{formatCurrency(rep.cardMetrics.monthCommission)}</div>
+            <div className="rep-stat-label">This month</div>
+            <div className="rep-stat-sub">{rep.cardMetrics.monthLabel}</div>
           </div>
           <div className="rep-stat-item">
-            <div className="rep-stat-value">{formatPercent(rep.stats.fpRate)}</div>
-            <div className="rep-stat-label">FP Rate</div>
+            <div className="rep-stat-value">{formatPercent(rep.cardMetrics.fpRate)}</div>
+            <div className="rep-stat-label">FP rate</div>
           </div>
         </div>
 
@@ -449,6 +633,7 @@ export function RepRoster() {
             />
           </div>
         </div>
+        <div className="rep-ytd-line">YTD {formatCurrency(rep.cardMetrics.ytdCommission)}</div>
 
         <div className="rep-card-footer">
           <div className="rep-card-actions">
@@ -713,9 +898,9 @@ export function RepRoster() {
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
                 >
-                  <option value="commission">Most commission</option>
+                  <option value="commission">Most this period commission</option>
                   <option value="units">Most units</option>
-                  <option value="fpRate">Best FP rate</option>
+                  <option value="fpRate">Best period FP rate</option>
                   <option value="name">Name A-Z</option>
                   <option value="lastSynced">Last synced</option>
                 </select>
@@ -785,7 +970,7 @@ export function RepRoster() {
                     </tr>
                   ) : (
                     sortedReps.map((rep, index) => {
-                      const statusTone = getRepStatusTone(rep.stats.fpRate);
+                      const statusTone = getRepStatusTone(rep.cardMetrics.fpRate);
                       const statusClass = getRepStatusClass(statusTone);
                       const isTopCommission = index < 3 && statusTone !== "behind";
 
@@ -803,20 +988,20 @@ export function RepRoster() {
                               className={`comp-mono ${isTopCommission ? "comp-accent" : ""}`}
                               style={statusTone === "behind" ? { color: "var(--red)" } : undefined}
                             >
-                              {formatCurrency(rep.stats.commission)}
+                              {formatCurrency(rep.cardMetrics.periodCommission)}
                             </span>
                           </td>
                           <td>
                             <span className="comp-mono">{formatUnits(rep.stats.units)}</span>
                           </td>
                           <td>
-                            <span className="comp-mono">{formatPercent(rep.stats.fpRate)}</span>
+                            <span className="comp-mono">{formatPercent(rep.cardMetrics.fpRate)}</span>
                           </td>
                           <td>
-                            <span className="comp-mono">{formatUnits(rep.stats.fpSold)}</span>
+                            <span className="comp-mono">{formatUnits(rep.cardMetrics.fpSold)}</span>
                           </td>
                           <td>
-                            <span className="comp-missed">{formatCurrency(rep.stats.missedFpCommission)}</span>
+                            <span className="comp-missed">{formatCurrency(rep.cardMetrics.missedFpCommission)}</span>
                           </td>
                           <td>
                             <span className={`rep-status-badge ${statusClass}`}>{getRepStatusLabel(statusTone)}</span>
@@ -1396,6 +1581,10 @@ export function RepRoster() {
           margin-bottom: 14px;
         }
 
+        .manager-dashboard .rep-stat-item {
+          min-width: 0;
+        }
+
         .manager-dashboard .rep-stat-value {
           font-family: "Instrument Serif", serif;
           font-size: 24px;
@@ -1407,8 +1596,14 @@ export function RepRoster() {
         .manager-dashboard .rep-stat-label {
           font-family: "DM Mono", monospace;
           font-size: 9px;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.04em;
+          color: var(--ink-2);
+        }
+
+        .manager-dashboard .rep-stat-sub {
+          font-family: "DM Mono", monospace;
+          font-size: 9px;
+          letter-spacing: 0.04em;
           color: var(--ink-3);
         }
 
@@ -1428,6 +1623,13 @@ export function RepRoster() {
           border-radius: 99px;
           background: var(--accent);
           transition: width 0.8s ease;
+        }
+
+        .manager-dashboard .rep-ytd-line {
+          font-family: "DM Mono", monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+          margin-bottom: 12px;
         }
 
         .manager-dashboard .rep-card-footer {
