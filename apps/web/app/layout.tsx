@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   ClerkProvider,
   SignInButton,
@@ -89,8 +90,11 @@ export default function RootLayout({
           signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
         >
           <header className="sticky top-0 z-10 flex items-center justify-between gap-6 border-b border-border/50 bg-background/90 px-6 py-4 text-sm font-semibold text-foreground backdrop-blur">
-            <span>PipelineIQ</span>
+            <Link href="/">PipelineIQ</Link>
             <div className="flex items-center gap-2">
+              <Link href="/pricing" className="text-ink-2 hover:text-ink">
+                Pricing
+              </Link>
               <SignedOut>
                 <SignInButton mode="modal">Sign in</SignInButton>
                 <SignUpButton mode="modal">Sign up</SignUpButton>

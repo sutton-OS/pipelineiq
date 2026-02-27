@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 import { requireUserId } from "@/lib/auth";
+import { createStripeClient } from "@/lib/stripe-billing";
 import { getUserSubscription } from "@/lib/subscription";
+import { logServerError } from "@/lib/server-error";
 
 export async function POST() {
   try {
@@ -16,7 +17,7 @@ export async function POST() {
       );
     }
 
-    const stripe = new Stripe(secretKey, { apiVersion: "2026-01-28.clover" });
+    const stripe = createStripeClient(secretKey);
 
     const { subscription } = await getUserSubscription(userId);
     const customerId = subscription?.stripe_customer_id;
@@ -31,15 +32,19 @@ export async function POST() {
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${appUrl}/dashboard/settings`,
+      ...(process.env.STRIPE_PORTAL_CONFIG_ID
+        ? { configuration: process.env.STRIPE_PORTAL_CONFIG_ID }
+        : {}),
     });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
+    const referenceId = logServerError("app/api/portal", error);
     const message =
       error instanceof Error && error.message === "Unauthorized"
         ? "Unauthorized"
         : "Failed to create portal session";
     const status = message === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message, referenceId }, { status });
   }
 }

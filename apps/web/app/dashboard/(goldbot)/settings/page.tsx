@@ -61,7 +61,7 @@ export default async function SettingsPage() {
   const userId = await requireUserId();
   const supabase = createServerClient();
 
-  const [{ isPro }, { data: team }] = await Promise.all([
+  const [{ isPaid, planTier }, { data: team }] = await Promise.all([
     getUserSubscription(userId),
     supabase
       .from("teams")
@@ -74,6 +74,14 @@ export default async function SettingsPage() {
 
   const teamName = team?.name ?? "My Team";
   const monthlyGoal = Number(team?.goal_monthly ?? 0);
+  const currentPlanLabel =
+    planTier === "enterprise"
+      ? "Enterprise"
+      : planTier === "pro"
+        ? "Pro"
+        : planTier === "basic"
+          ? "Basic"
+          : "Free";
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -89,26 +97,33 @@ export default async function SettingsPage() {
 
         <Card className="border-border bg-white/70">
           <CardHeader>
-            <CardTitle>Current Plan: {isPro ? "Pro" : "Free"}</CardTitle>
+            <CardTitle>Current Plan: {currentPlanLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border border-border bg-paper p-4">
-                <h3 className="font-medium text-ink">Free</h3>
+                <h3 className="font-medium text-ink">Basic</h3>
                 <p className="mt-2 text-sm text-ink-2">
-                  3 reports, PDF export, CSV upload
+                  Unlimited reports, CSV upload, PDF export
                 </p>
               </div>
 
               <div className="rounded-lg border border-border bg-paper p-4">
-                <h3 className="font-medium text-ink">Pro - $29/mo</h3>
+                <h3 className="font-medium text-ink">Pro</h3>
                 <p className="mt-2 text-sm text-ink-2">
-                  Unlimited reports, team management, priority support
+                  Automation controls, audit exports, priority support
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-paper p-4">
+                <h3 className="font-medium text-ink">Enterprise</h3>
+                <p className="mt-2 text-sm text-ink-2">
+                  Dedicated onboarding, SLA-backed support, billing reviews
                 </p>
               </div>
             </div>
 
-            <BillingControls isPro={isPro} />
+            <BillingControls isPaid={isPaid} />
           </CardContent>
         </Card>
       </section>

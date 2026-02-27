@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createInboundMessageFromWebhook } from "@/lib/goldbot";
+import { logServerError } from "@/lib/server-error";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
 
 function shouldVerifySignature(): boolean {
@@ -68,7 +69,12 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to process inbound webhook";
     const status = message.includes("No lead") ? 404 : message.includes("Ambiguous") ? 409 : 500;
+    const referenceId = logServerError("app/api/webhook/twilio", error, {
+      status,
+      from,
+      messageSid: messageSid || null,
+    });
 
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message, referenceId }, { status });
   }
 }

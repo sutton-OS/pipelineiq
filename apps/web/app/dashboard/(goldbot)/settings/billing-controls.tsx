@@ -1,19 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type BillingControlsProps = {
-  isPro: boolean;
+  isPaid: boolean;
 };
 
-export function BillingControls({ isPro }: BillingControlsProps) {
+export function BillingControls({ isPaid }: BillingControlsProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleClick() {
-    const endpoint = isPro ? "/api/portal" : "/api/checkout";
+    const endpoint = "/api/portal";
     setIsLoading(true);
 
     try {
@@ -34,9 +35,17 @@ export function BillingControls({ isPro }: BillingControlsProps) {
   }
 
   return (
-    <Button type="button" onClick={handleClick} disabled={isLoading}>
-      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-      {isPro ? "Manage Subscription" : "Upgrade to Pro"}
-    </Button>
+    <div className="flex flex-wrap gap-2">
+      <Button asChild variant={isPaid ? "default" : "outline"}>
+        <Link href="/pricing">{isPaid ? "Change Plan" : "View Pricing Plans"}</Link>
+      </Button>
+
+      {isPaid ? (
+        <Button type="button" variant="outline" onClick={handleClick} disabled={isLoading}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Manage Subscription
+        </Button>
+      ) : null}
+    </div>
   );
 }

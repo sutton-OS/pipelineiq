@@ -12,7 +12,7 @@ export function SettingsFeedback() {
 
   useEffect(() => {
     if (success === "true" && !shownSuccessToast.current) {
-      toast.success("Subscription updated. Pro access is now active.");
+      toast.success("Subscription updated successfully.");
       shownSuccessToast.current = true;
     }
   }, [success]);

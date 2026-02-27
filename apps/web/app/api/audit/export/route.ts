@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { ensureOrgAndLocation, listAuditEntriesForExport } from "@/lib/goldbot";
+import { logServerError } from "@/lib/server-error";
 
 function csvEscape(value: string): string {
   if (value.includes('"') || value.includes(",") || value.includes("\n")) {
@@ -66,6 +67,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to export audit logs";
     const status = message === "Unauthorized" ? 401 : message.startsWith("Forbidden") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const referenceId = logServerError("app/api/audit/export", error, { status });
+    return NextResponse.json({ error: message, referenceId }, { status });
   }
 }

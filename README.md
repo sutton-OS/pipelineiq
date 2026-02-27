@@ -65,12 +65,16 @@ Required web keys (`apps/web/.env.example`):
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `STRIPE_SECRET_KEY`
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_BASIC_PRICE_ID`
 - `STRIPE_PRO_PRICE_ID`
+- `STRIPE_ENTERPRISE_PRICE_ID`
 - `STRIPE_WEBHOOK_SECRET`
 
 Optional:
 
 - `DEV_USER_ID` (local fallback when Clerk is not configured)
+- `STRIPE_PORTAL_CONFIG_ID` (if using a custom Billing Portal configuration)
+- `STRIPE_TRIAL_DAYS` (defaults to `14`)
 - `TWILIO_VERIFY_SIGNATURE`
 - `TWILIO_WEBHOOK_URL`
 
@@ -157,10 +161,11 @@ npm run dev:all
 
 ## Stripe Configuration
 
-1. Create a recurring price in Stripe.
-2. Set `STRIPE_PRO_PRICE_ID` to that price.
+1. Create recurring prices in Stripe for Basic, Pro, and Enterprise tiers.
+2. Set `STRIPE_BASIC_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, and `STRIPE_ENTERPRISE_PRICE_ID`.
 3. Set `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
 4. Add webhook endpoint for `/api/webhook/stripe` and set `STRIPE_WEBHOOK_SECRET`.
+5. Optional: set `STRIPE_TRIAL_DAYS` and `STRIPE_PORTAL_CONFIG_ID`.
 
 ## Twilio Configuration
 

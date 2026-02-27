@@ -54,7 +54,7 @@ export default function HomePage() {
         <div className="nav-links">
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
-          <a href="#pricing">Pricing</a>
+          <Link href="/pricing">Pricing</Link>
           <a href="#demo">Try it</a>
         </div>
         <div className="nav-actions">
@@ -460,7 +460,7 @@ export default function HomePage() {
             <h2>
               Simple, <em>honest</em> pricing.
             </h2>
-            <p>Free while we&apos;re getting started. Pro plan coming soon for power users.</p>
+            <p>Choose Basic, Pro, or Enterprise on the dedicated pricing page.</p>
           </div>
           <div className="pricing-cards">
             <div className="pricing-card reveal">
@@ -506,14 +506,9 @@ export default function HomePage() {
                 <li>Priority support</li>
                 <li className="muted">Available soon</li>
               </ul>
-              <button
-                type="button"
-                className="pricing-btn pricing-btn-pro"
-                disabled
-                style={{ opacity: 0.6, cursor: "not-allowed" }}
-              >
-                Notify me when ready
-              </button>
+              <Link href="/pricing" className="pricing-btn pricing-btn-pro">
+                View full pricing
+              </Link>
             </div>
           </div>
         </div>
