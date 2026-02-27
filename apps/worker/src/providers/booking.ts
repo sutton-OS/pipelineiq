@@ -69,7 +69,7 @@ function readGoogleCalendarConfig(settings: Record<string, unknown>): GoogleCale
     null;
   const summaryTemplate =
     asString(settings.google_calendar_summary_template) ??
-    "GoldBot appointment - {{lead_name}}";
+    "PipelineIQ appointment - {{lead_name}}";
 
   if (!calendarId || !serviceAccountEmail || !serviceAccountPrivateKey) {
     throw new Error("google_calendar_config_missing");

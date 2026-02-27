@@ -10,6 +10,7 @@ import {
 } from "@clerk/nextjs";
 import { DM_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
 import { Toaster } from "sonner";
+import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { requireStartupEnv } from "@/lib/env";
 import "./globals.css";
 
@@ -43,19 +44,19 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "https://pipelineiq.app"
   ),
   title: {
-    default: "PipelineIQ | Beautiful Sales Reporting",
+    default: "PipelineIQ | Lead Workflow Operations",
     template: "%s | PipelineIQ",
   },
   description:
-    "One CSV → stunning PDF reports your team will actually read. Upload sales data, preview instantly, and export leadership-ready PDFs.",
+    "Lead intake, follow-up workflows, staff queues, and reports in one practical operations workspace.",
   applicationName: "PipelineIQ",
   openGraph: {
     type: "website",
     siteName: "PipelineIQ",
     url: "/",
-    title: "PipelineIQ | Beautiful Sales Reporting",
+    title: "PipelineIQ | Lead Workflow Operations",
     description:
-      "One CSV → stunning PDF reports your team will actually read. Upload sales data, preview instantly, and export leadership-ready PDFs.",
+      "Lead intake, follow-up workflows, staff queues, and reports in one practical operations workspace.",
     images: [
       {
         url: "/og-placeholder.svg",
@@ -67,9 +68,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PipelineIQ | Beautiful Sales Reporting",
+    title: "PipelineIQ | Lead Workflow Operations",
     description:
-      "One CSV → stunning PDF reports your team will actually read.",
+      "Lead intake, follow-up workflows, staff queues, and reports in one workspace.",
     images: ["/og-placeholder.svg"],
   },
 };
@@ -105,6 +106,7 @@ export default function RootLayout({
             </div>
           </header>
           {children}
+          <CookieConsentBanner />
         </ClerkProvider>
         <Toaster position="top-right" richColors />
       </body>

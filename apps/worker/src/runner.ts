@@ -8,6 +8,7 @@ import { governActions } from "@pipelineiq/engine";
 import { sendSmsViaTwilio } from "./providers/twilio";
 import { pool } from "./db";
 import { evaluateStateMachine } from "@pipelineiq/engine";
+import { captureWorkerException } from "./sentry";
 import {
   DEFAULT_AUTONOMY_MODE,
   DEFAULT_BOOKING_PROVIDER,
@@ -658,6 +659,12 @@ async function handleClaimedJob(job: JobRow): Promise<void> {
     await markDone(job.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    captureWorkerException("worker.job", error, {
+      jobId: job.id,
+      jobType: job.type,
+      attempts: job.attempts,
+      maxAttempts: job.max_attempts,
+    });
     await markFailure(job.id, job.attempts, job.max_attempts, message);
   }
 }
@@ -672,6 +679,7 @@ export async function runLoop(): Promise<never> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[worker] runLoop error: ${message}`);
+      captureWorkerException("worker.runLoop", error);
     }
 
     await sleep(POLL_INTERVAL_MS);

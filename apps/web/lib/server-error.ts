@@ -1,3 +1,5 @@
+import { captureSentryServerException } from "@/lib/sentry";
+
 function errorDetails(error: unknown): {
   message: string;
   stack: string | undefined;
@@ -29,10 +31,15 @@ export function logServerError(
 ): string {
   const referenceId = createReferenceId();
   const details = errorDetails(error);
+  const sentryEventId = captureSentryServerException(route, error, {
+    referenceId,
+    ...extra,
+  });
 
   console.error("[server_error]", {
     route,
     referenceId,
+    sentryEventId,
     message: details.message,
     stack: details.stack,
     cause: details.cause,

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUserId } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { getUserSubscription } from "@/lib/subscription";
+import { SHOW_EXPERIMENTAL_GOLDBOT_FEATURES } from "@/lib/features";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,40 +151,42 @@ export default async function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-serif">Automation</h2>
+        <h2 className="text-2xl font-serif">Automations</h2>
 
         <Card className="border-border bg-white/70">
           <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div>
-              <p className="font-medium text-ink">GoldBot Automation Controls</p>
+              <p className="font-medium text-ink">Workflow Automation Controls</p>
               <p className="text-sm text-ink-2">
                 Configure kill-switches, business hours, templates, and throttle caps.
               </p>
             </div>
             <Button asChild>
-              <Link href="/dashboard/settings/automation">Open Automation Settings</Link>
+              <Link href="/dashboard/settings/automation">Open Automations</Link>
             </Button>
           </CardContent>
         </Card>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-serif">Environment</h2>
+      {SHOW_EXPERIMENTAL_GOLDBOT_FEATURES ? (
+        <section className="space-y-4">
+          <h2 className="text-2xl font-serif">Environment</h2>
 
-        <Card className="border-border bg-white/70">
-          <CardContent className="flex items-center justify-between gap-3 pt-6">
-            <div>
-              <p className="font-medium text-ink">Environment Status</p>
-              <p className="text-sm text-ink-2">
-                View required key presence for dashboard services.
-              </p>
-            </div>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/settings/env">Open Environment Status</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
+          <Card className="border-border bg-white/70">
+            <CardContent className="flex items-center justify-between gap-3 pt-6">
+              <div>
+                <p className="font-medium text-ink">Environment Status</p>
+                <p className="text-sm text-ink-2">
+                  View required key presence for dashboard services.
+                </p>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/dashboard/settings/env">Open Environment Status</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
     </div>
   );
 }

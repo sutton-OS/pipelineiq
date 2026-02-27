@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const metadata: Metadata = {
-  title: "Lead Intake",
+  title: "Intake",
 };
 
 async function submitLeadIntake(formData: FormData) {
@@ -33,7 +33,7 @@ export default async function IntakePage({
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       <header className="space-y-1">
-        <h1 className="text-4xl font-serif">Lead Intake</h1>
+        <h1 className="text-4xl font-serif">Intake</h1>
         <p className="text-sm text-ink-2">
           Manual intake with phone deduplication and consent tracking.
         </p>

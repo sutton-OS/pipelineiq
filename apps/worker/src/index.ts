@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import { z } from "zod";
+import { startWorkerHealthServer } from "./health";
+import { captureWorkerException } from "./sentry";
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1).optional(),
@@ -48,11 +50,46 @@ async function main() {
   }
   console.log(`[worker] starting (${NODE_ENV})`);
 
+  const healthServer = startWorkerHealthServer();
+  healthServer.setReady(false);
+
   const [{ pool }, { ensureSchema }, { runLoop }] = await Promise.all([
     import("./db"),
     import("./schema"),
     import("./runner"),
   ]);
+
+  let shuttingDown = false;
+  const shutdown = async (signal: "SIGTERM" | "SIGINT") => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+
+    console.log(`[worker] received ${signal}, shutting down`);
+    healthServer.setReady(false);
+
+    try {
+      await healthServer.close();
+    } catch (error) {
+      captureWorkerException("shutdown.health", error, { signal });
+    }
+
+    try {
+      await pool.end();
+    } catch (error) {
+      captureWorkerException("shutdown.db", error, { signal });
+    }
+
+    process.exit(0);
+  };
+
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
 
   try {
     await pool.query("SELECT 1");
@@ -60,17 +97,21 @@ async function main() {
 
     await ensureSchema();
     console.log("[worker] schema ready");
+    healthServer.setReady(true);
 
     await runLoop();
   } catch (error) {
+    healthServer.setReady(false);
     console.error("[worker] database unreachable");
     if (error instanceof Error) {
       console.error(error.message);
     }
+    captureWorkerException("worker.startup", error);
     throw error;
   }
 }
 
-void main().catch(() => {
+void main().catch((error) => {
+  captureWorkerException("worker.fatal", error);
   process.exit(1);
 });

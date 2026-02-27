@@ -19,7 +19,7 @@ async function main(): Promise<void> {
       ON CONFLICT DO NOTHING
       RETURNING id
     `,
-    ["dev-user-123", "GoldBot Demo Org", "goldbot-demo-org"],
+    ["dev-user-123", "PipelineIQ Demo Org", "pipelineiq-demo-org"],
   );
 
   const orgId =
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
             AND lower(name) = lower($2)
           LIMIT 1
         `,
-        ["dev-user-123", "GoldBot Demo Org"],
+        ["dev-user-123", "PipelineIQ Demo Org"],
       )
     ).rows[0]?.id;
 

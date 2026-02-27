@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 
 export const metadata: Metadata = {
-  title: "Operations",
+  title: "Follow-up",
 };
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -110,13 +110,13 @@ export default async function DashboardPage() {
     const subtitleItems = [
       context.locationName,
       `TZ ${context.timezone}`,
-      `Autonomy ${formatLabel(context.autonomyMode)}`,
+      `Automation ${formatLabel(context.autonomyMode)}`,
       `Booking ${formatLabel(context.bookingProvider)}`,
     ];
 
     return (
     <GoldBotPageShell
-      title="GoldBot Operations"
+      title="Follow-up"
       subtitle={
         <div className="flex flex-wrap items-center gap-2">
           {subtitleItems.map((item) => (
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild>
-              <Link href="/dashboard/intake">New Lead Intake</Link>
+              <Link href="/dashboard/intake">New Intake</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/dashboard/staff-queue">Staff Queue</Link>

@@ -114,7 +114,7 @@ export function AutomationSettingsForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="autonomyMode">Autonomy Mode</Label>
+          <Label htmlFor="autonomyMode">Automation Mode</Label>
           <select
             id="autonomyMode"
             name="autonomyMode"
@@ -122,8 +122,8 @@ export function AutomationSettingsForm({
             disabled={!canManageAutomation}
             className="border-input bg-background focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
           >
-            <option value="suggest_only">suggest_only (staff approval required)</option>
-            <option value="safe_auto">safe_auto (governed auto actions)</option>
+            <option value="suggest_only">suggest_only (staff review required)</option>
+            <option value="safe_auto">safe_auto (rules-based auto actions)</option>
           </select>
         </div>
       </div>
@@ -181,7 +181,7 @@ export function AutomationSettingsForm({
       })}
 
       <Button type="submit" disabled={!canManageAutomation || hasJsonErrors}>
-        Save Automation Settings
+        Save Automations
       </Button>
     </form>
   );

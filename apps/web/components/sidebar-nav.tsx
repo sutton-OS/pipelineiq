@@ -21,6 +21,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { SHOW_EXPERIMENTAL_GOLDBOT_FEATURES } from "@/lib/features";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -36,13 +37,13 @@ type NavSection = {
 
 const navSections: NavSection[] = [
   {
-    title: "GoldBot",
+    title: "Workflow",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Follow-up", icon: LayoutDashboard },
       { href: "/dashboard/leads", label: "Leads", icon: ListChecks },
+      { href: "/dashboard/intake", label: "Intake", icon: Upload },
       { href: "/dashboard/staff-queue", label: "Staff Queue", icon: AlertTriangle },
-      { href: "/dashboard/settings/automation", label: "Automation", icon: Bot },
-      { href: "/dashboard/audit", label: "Audit", icon: ActivitySquare },
+      { href: "/dashboard/settings/automation", label: "Automations", icon: Bot },
     ],
   },
   {
@@ -52,6 +53,18 @@ const navSections: NavSection[] = [
       { href: "/dashboard/reports", label: "Reports", icon: FileText },
     ],
   },
+  ...(SHOW_EXPERIMENTAL_GOLDBOT_FEATURES
+    ? [
+        {
+          title: "Experimental",
+          items: [
+            { href: "/dashboard/audit", label: "Audit Log", icon: ActivitySquare },
+            { href: "/dashboard/inbound-sim", label: "Inbound Simulator", icon: Upload },
+            { href: "/dashboard/settings/env", label: "Env Status", icon: Settings },
+          ],
+        } satisfies NavSection,
+      ]
+    : []),
   {
     title: "Settings",
     items: [{ href: "/dashboard/settings", label: "Billing & Settings", icon: Settings }],
@@ -131,7 +144,7 @@ function SidebarContent({ pathname }: { pathname: string }) {
           </span>
         </div>
         <p className="mt-2 text-[11px] uppercase tracking-[0.08em] text-[rgba(255,255,255,0.45)]">
-          GoldBot
+          Workflow Suite
         </p>
       </div>
 
@@ -192,7 +205,7 @@ export function SidebarNav() {
                   </span>
                 </div>
                 <p className="mt-2 text-[11px] uppercase tracking-[0.08em] text-[rgba(255,255,255,0.45)]">
-                  GoldBot
+                  Workflow Suite
                 </p>
               </div>
 

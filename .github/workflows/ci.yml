@@ -1,9 +1,27 @@
-name: CI
+name: CI/CD
 
 on:
-  push:
-    branches: ["main", "master", "codex/**"]
   pull_request:
+  push:
+    branches: ["main"]
+
+env:
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
+  WORKER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
+  REDIS_URL: redis://localhost:6379
+  NODE_ENV: test
+  DEV_USER_ID: ci-user
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
+  CLERK_SECRET_KEY: sk_test_ci
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: anon_ci
+  SUPABASE_SERVICE_ROLE_KEY: service_role_ci
+  STRIPE_SECRET_KEY: sk_test_ci
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci
+  STRIPE_PRO_PRICE_ID: price_ci
+  STRIPE_WEBHOOK_SECRET: whsec_ci
 
 jobs:
   quality:
@@ -22,27 +40,38 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
-      WORKER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pipelineiq
-      NODE_ENV: test
-      DEV_USER_ID: ci-user
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Install app dependencies
         run: npm ci
 
       - name: Install worker dependencies
-        run: npm --prefix services/worker ci
+        run: npm --prefix apps/worker ci
 
-      - name: Apply SQL migration
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/202602230001_goldbot_v1.sql
+      - name: Apply SQL migrations
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
 
       - name: Lint
         run: npm run lint
@@ -53,5 +82,60 @@ jobs:
       - name: Typecheck (worker)
         run: npm run worker:typecheck
 
-      - name: Worker tests
+      - name: Test (web)
+        run: npm run web:test
+
+      - name: Test (worker)
         run: npm run worker:test
+
+      - name: Build Docker image
+        run: docker build -t pipelineiq:${{ github.sha }} .
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      CLOUD_RUN_ENV_VARS: ${{ vars.CLOUD_RUN_ENV_VARS }}
+      DEPLOY_IMAGE_NAME: ${{ vars.DEPLOY_IMAGE_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build, push, and deploy to Cloud Run
+        run: |
+          : "${GCP_PROJECT_ID:?Set repo variable GCP_PROJECT_ID}"
+          : "${GCP_REGION:?Set repo variable GCP_REGION}"
+          : "${CLOUD_RUN_SERVICE:?Set repo variable CLOUD_RUN_SERVICE}"
+
+          REPOSITORY="${GCP_ARTIFACT_REPOSITORY:-pipelineiq}"
+          IMAGE_NAME="${DEPLOY_IMAGE_NAME:-pipelineiq-web}"
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}"
+
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+          RUNTIME_ENV_VARS="NODE_ENV=production,SENTRY_RELEASE=${GITHUB_SHA}"
+          if [ -n "${CLOUD_RUN_ENV_VARS:-}" ]; then
+            RUNTIME_ENV_VARS="${RUNTIME_ENV_VARS},${CLOUD_RUN_ENV_VARS}"
+          fi
+
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --image "${IMAGE_URI}" \
+            --allow-unauthenticated \
+            --set-env-vars "${RUNTIME_ENV_VARS}"

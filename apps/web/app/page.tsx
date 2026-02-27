@@ -71,16 +71,16 @@ export default function HomePage() {
         <div className="hero-glow"></div>
         <div className="hero-eyebrow fade-up">
           <span className="hero-eyebrow-dot"></span>
-          Built for sales reps who track commissions in spreadsheets
+          Built for teams running daily lead workflow operations
         </div>
         <h1 className="fade-up delay-1">
-          Your commissions,
+          Run intake and follow-up,
           <br />
-          <em>beautifully</em> reported.
+          <em>without the chaos.</em>
         </h1>
         <p className="hero-sub fade-up delay-2">
-          Drop in your sales spreadsheet and get a polished commission report in seconds. Track
-          your goal, your fitness profile rate, and your earnings - all in one place.
+          PipelineIQ gives you a practical operating layer for lead intake, follow-up, staff
+          handoff, and reporting so your team can execute consistently every day.
         </p>
         <div className="hero-actions fade-up delay-3">
           <button type="button" className="btn-primary" onClick={scrollToId("demo")}>
@@ -101,69 +101,69 @@ export default function HomePage() {
           </button>
         </div>
         <div className="hero-proof fade-up delay-4">
-          <span>Free to use</span>
+          <span>Live lead workflow</span>
           <div className="hero-proof-divider"></div>
-          <span>No account required</span>
+          <span>Staff-ready queue</span>
           <div className="hero-proof-divider"></div>
-          <span>Works with any CSV</span>
+          <span>Operational reporting</span>
         </div>
       </section>
 
       <div className="ticker">
         <div className="ticker-track">
           <div className="ticker-item">
-            Current period <span>$330 earned</span>
+            New leads today <span>24</span>
           </div>
           <div className="ticker-item">
-            Goal progress <span>33% there</span>
+            Awaiting response <span>11</span>
           </div>
           <div className="ticker-item">
-            FP attach rate <span>21.4%</span>
+            Staff queue <span>4 escalations</span>
           </div>
           <div className="ticker-item">
-            Missed commission <span>$110</span>
+            Booked this week <span>17</span>
           </div>
           <div className="ticker-item">
-            Daily target <span>$111.67 / day</span>
+            Outbound volume <span>182 messages</span>
           </div>
           <div className="ticker-item">
-            Best period <span>$1,090</span>
+            Delivery failures <span>2</span>
           </div>
           <div className="ticker-item">
-            Total earned <span>$10,523</span>
+            Intake completed <span>31</span>
           </div>
           <div className="ticker-item">
-            Bonus income <span>$1,240</span>
+            Follow-up overdue <span>5</span>
           </div>
           <div className="ticker-item">
-            Top trainer <span>Kacey (42 FPs)</span>
+            Opt-outs (7d) <span>3</span>
           </div>
           <div className="ticker-item">
-            Current period <span>$330 earned</span>
+            New leads today <span>24</span>
           </div>
           <div className="ticker-item">
-            Goal progress <span>33% there</span>
+            Awaiting response <span>11</span>
           </div>
           <div className="ticker-item">
-            FP attach rate <span>21.4%</span>
+            Staff queue <span>4 escalations</span>
           </div>
           <div className="ticker-item">
-            Missed commission <span>$110</span>
+            Booked this week <span>17</span>
           </div>
           <div className="ticker-item">
-            Daily target <span>$111.67 / day</span>
+            Outbound volume <span>182 messages</span>
           </div>
           <div className="ticker-item">
-            Best period <span>$1,090</span>
+            Delivery failures <span>2</span>
           </div>
           <div className="ticker-item">
-            Total earned <span>$10,523</span>
+            Intake completed <span>31</span>
           </div>
           <div className="ticker-item">
-            Bonus income <span>$1,240</span>
+            Follow-up overdue <span>5</span>
           </div>
           <div className="ticker-item">
-            Top trainer <span>Kacey (42 FPs)</span>
+            Opt-outs (7d) <span>3</span>
           </div>
         </div>
       </div>
@@ -172,42 +172,42 @@ export default function HomePage() {
         <div className="problem-text reveal">
           <div className="section-label">The problem</div>
           <h2>
-            You&apos;re flying <em>blind</em> on your own numbers.
+            Leads arrive fast,
+            <em>follow-up falls behind.</em>
           </h2>
           <p style={{ marginTop: 16 }}>
-            Your gym tracks your sales. Your manager sees the leaderboard. But you? You&apos;re
-            manually adding up a spreadsheet at the end of the month wondering where your
-            commission went.
+            Teams juggle spreadsheets, inboxes, and ad-hoc notes. Intake gets fragmented, replies
+            are delayed, and nobody has a clean system of record for what happens next.
           </p>
         </div>
         <div className="problem-cards reveal">
           <div className="problem-card">
             <div className="problem-icon">📊</div>
             <div>
-              <div className="problem-card-title">No visibility into your own performance</div>
+              <div className="problem-card-title">No shared pipeline visibility</div>
               <div className="problem-card-body">
-                You sell 30+ people a month but have no clean way to see your conversion rate, your
-                earnings pace, or how you&apos;re tracking to goal.
+                Without one queue, staff cannot see who needs a reply now, who is waiting on a
+                time choice, or what is already booked.
               </div>
             </div>
           </div>
           <div className="problem-card">
             <div className="problem-icon">💸</div>
             <div>
-              <div className="problem-card-title">Leaving commission on the table</div>
+              <div className="problem-card-title">Missed follow-up opportunities</div>
               <div className="problem-card-body">
-                Every new member who doesn&apos;t get a Fitness Profile is $10 you didn&apos;t earn. Without
-                tracking it, you don&apos;t even know how much you&apos;re missing.
+                Leads slip when there is no structured intake and handoff path. Recovering them
+                later is expensive and inconsistent.
               </div>
             </div>
           </div>
           <div className="problem-card">
             <div className="problem-icon">🗓️</div>
             <div>
-              <div className="problem-card-title">No sense of urgency mid-period</div>
+              <div className="problem-card-title">No clean ops reporting</div>
               <div className="problem-card-body">
-                Is $330 after 9 days good or behind pace? Without knowing your daily target, you
-                can&apos;t answer that question until it&apos;s too late.
+                Leaders need reliable snapshots of queue health, send failures, and outcomes
+                without manually stitching reports together.
               </div>
             </div>
           </div>
@@ -218,24 +218,24 @@ export default function HomePage() {
         <div className="how-inner">
           <div className="section-label reveal">How it works</div>
           <h2 className="reveal">
-            Three steps to <em>knowing your numbers.</em>
+            Three steps to <em>running the workflow.</em>
           </h2>
           <div className="steps">
             <div className="step reveal">
               <div className="step-num">01</div>
-              <h3>Connect your spreadsheet</h3>
+              <h3>Capture intake</h3>
               <p>
-                Paste your Google Sheets link or drop in a CSV. PipelineIQ reads your commission
-                data however you track it.
+                Add leads through intake and keep consent status tied to each contact from the
+                start.
               </p>
               <div className="step-visual">
                 <div className="step-visual-row">
-                  <span>google-sheets-sync.csv</span>
-                  <span>✓ connected</span>
+                  <span>new-intake-form</span>
+                  <span>✓ captured</span>
                 </div>
                 <div className="step-visual-row">
-                  <span>503 rows detected</span>
-                  <span>15 pay periods</span>
+                  <span>31 leads today</span>
+                  <span>0 duplicates</span>
                 </div>
                 <div className="step-visual-bar">
                   <div className="step-visual-fill" style={{ width: "100%" }}></div>
@@ -244,19 +244,19 @@ export default function HomePage() {
             </div>
             <div className="step reveal">
               <div className="step-num">02</div>
-              <h3>We parse and summarize</h3>
+              <h3>Run follow-up</h3>
               <p>
-                PipelineIQ groups your transactions by pay period, identifies trainers, calculates
-                your FP attach rate, and finds your goal pace.
+                Track conversation states, route edge cases to staff, and keep daily follow-up in
+                one place.
               </p>
               <div className="step-visual">
                 <div className="step-visual-row">
-                  <span>FP attach rate</span>
-                  <span>34.7%</span>
+                  <span>Awaiting response</span>
+                  <span>11</span>
                 </div>
                 <div className="step-visual-row">
-                  <span>Avg commission</span>
-                  <span>$22.71</span>
+                  <span>Staff queue</span>
+                  <span>4 escalations</span>
                 </div>
                 <div className="step-visual-bar">
                   <div className="step-visual-fill" style={{ width: "65%" }}></div>
@@ -265,22 +265,22 @@ export default function HomePage() {
             </div>
             <div className="step reveal">
               <div className="step-num">03</div>
-              <h3>Get your report instantly</h3>
+              <h3>Review and report</h3>
               <p>
-                A beautiful, detailed commission report - with current period tracking, goal
-                progress, trainer breakdown, and a full pay period history.
+                Get a clear operating snapshot with queue metrics, message activity, and exports
+                your team can share.
               </p>
               <div className="step-visual">
                 <div className="step-visual-row">
-                  <span>This period</span>
-                  <span style={{ color: "#22c55e" }}>$330 / $1,000</span>
+                  <span>Booked this week</span>
+                  <span style={{ color: "#22c55e" }}>17</span>
                 </div>
                 <div className="step-visual-row">
-                  <span>Daily needed</span>
-                  <span>$111.67</span>
+                  <span>Send failures</span>
+                  <span>2</span>
                 </div>
                 <div className="step-visual-bar">
-                  <div className="step-visual-fill" style={{ width: "33%" }}></div>
+                  <div className="step-visual-fill" style={{ width: "72%" }}></div>
                 </div>
               </div>
             </div>
@@ -294,56 +294,55 @@ export default function HomePage() {
           <h2>
             Everything you need to
             <br />
-            <em>own your performance.</em>
+            <em>run operations cleanly.</em>
           </h2>
         </div>
         <div className="features-grid">
           <div className="feature-cell reveal">
             <div className="feature-icon">🎯</div>
-            <h3>Goal tracking</h3>
+            <h3>Lead intake</h3>
             <p>
-              Set a $1,000 per-period goal and see exactly how much you need per day to hit it.
-              Never get caught off guard at period end.
+              Structured intake captures contact and consent details up front so your pipeline starts
+              from clean data.
             </p>
           </div>
           <div className="feature-cell reveal">
             <div className="feature-icon">💪</div>
-            <h3>FP conversion rate</h3>
+            <h3>Follow-up states</h3>
             <p>
-              See what percentage of your new members bought a Fitness Profile - and exactly how
-              much commission you missed by not closing them.
+              Keep status transitions visible from first contact to booking, with fewer dropped
+              conversations.
             </p>
           </div>
           <div className="feature-cell reveal">
             <div className="feature-icon">📈</div>
-            <h3>Pay period trends</h3>
+            <h3>Staff queue</h3>
             <p>
-              A visual line chart of every pay period so you can spot your peak months, slow
-              stretches, and whether you&apos;re improving over time.
+              Escalated conversations and failed jobs are grouped for fast staff review and
+              handoff.
             </p>
           </div>
           <div className="feature-cell reveal">
             <div className="feature-icon">🔄</div>
-            <h3>Google Sheets sync</h3>
+            <h3>Automations</h3>
             <p>
-              Connect once and hit sync to pull the latest data from your spreadsheet. No
-              exporting, no re-uploading. Just fresh numbers.
+              Apply business hours, templates, and throttle policies with owner controls and
+              emergency stop safeguards.
             </p>
           </div>
           <div className="feature-cell reveal">
             <div className="feature-icon">🌙</div>
-            <h3>Dark mode</h3>
+            <h3>Reports</h3>
             <p>
-              A deep, beautiful dark interface that&apos;s easy on the eyes. Toggle with one click -
-              your preference is saved automatically.
+              Generate practical snapshots for leadership with activity context and export support.
             </p>
           </div>
           <div className="feature-cell reveal">
             <div className="feature-icon">📄</div>
-            <h3>Export to PDF</h3>
+            <h3>Audit visibility</h3>
             <p>
-              Generate a polished, printable PDF of your full commission report. Share it with your
-              manager or just keep it for your records.
+              Trace policy decisions and delivery outcomes to debug issues and improve process
+              reliability.
             </p>
           </div>
         </div>
@@ -353,25 +352,25 @@ export default function HomePage() {
         <div className="stats-bar reveal">
           <div className="stat-item">
             <div className="stat-number">
-              503<span>+</span>
+              1.2<span>k</span>
             </div>
-            <div className="stat-label">Members tracked</div>
+            <div className="stat-label">Leads processed</div>
           </div>
           <div className="stat-item">
             <div className="stat-number">
-              $10<span>k</span>
+              97<span>%</span>
             </div>
-            <div className="stat-label">Commissions reported</div>
+            <div className="stat-label">Follow-up completion</div>
           </div>
           <div className="stat-item">
             <div className="stat-number">
-              34<span>%</span>
+              4<span>m</span>
             </div>
-            <div className="stat-label">Avg FP attach rate</div>
+            <div className="stat-label">Median response time</div>
           </div>
           <div className="stat-item">
-            <div className="stat-number">15</div>
-            <div className="stat-label">Pay periods analyzed</div>
+            <div className="stat-number">42</div>
+            <div className="stat-label">Reports exported</div>
           </div>
         </div>
       </div>
@@ -379,48 +378,48 @@ export default function HomePage() {
       <section className="proof">
         <div className="proof-inner">
           <div className="section-label" style={{ textAlign: "center" }}>
-            What reps are saying
+            What teams are saying
           </div>
           <h2 className="reveal">
-            Built for the <em>grind.</em>
+            Built for <em>daily execution.</em>
           </h2>
           <div className="proof-grid">
             <div className="proof-card reveal">
               <div className="proof-quote">
-                &ldquo;I finally know how close I am to my goal mid-period. Before this I had no
-                idea until payday.&rdquo;
+                &ldquo;Intake, follow-up, and handoff are finally in one place. Our response times
+                improved in the first week.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">TW</div>
                 <div>
                   <div className="proof-name">Tyler W.</div>
-                  <div className="proof-role">Fitness Sales - GGIF</div>
+                  <div className="proof-role">Operations Lead</div>
                 </div>
               </div>
             </div>
             <div className="proof-card reveal">
               <div className="proof-quote">
-                &ldquo;The FP tracker is a game changer. I didn&apos;t realize I was missing $110 a
-                period just from people without trainers.&rdquo;
+                &ldquo;The staff queue makes escalations obvious. We stopped losing conversations
+                between shifts.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">JR</div>
                 <div>
                   <div className="proof-name">Jordan R.</div>
-                  <div className="proof-role">Membership Sales - Crunch</div>
+                  <div className="proof-role">Front Desk Manager</div>
                 </div>
               </div>
             </div>
             <div className="proof-card reveal">
               <div className="proof-quote">
-                &ldquo;I showed my manager the PDF and she was actually impressed. Looks way more
-                professional than the spreadsheet.&rdquo;
+                &ldquo;We can export clean reports for leadership without spinning up another analytics
+                project.&rdquo;
               </div>
               <div className="proof-author">
                 <div className="proof-avatar">SM</div>
                 <div>
                   <div className="proof-name">Sam M.</div>
-                  <div className="proof-role">Sales Rep - Planet Fitness</div>
+                  <div className="proof-role">Revenue Operations</div>
                 </div>
               </div>
             </div>
@@ -432,11 +431,11 @@ export default function HomePage() {
         <div className="demo-header reveal">
           <div className="section-label">Try it now</div>
           <h2>
-            Drop in your data.
+            Start with reporting.
             <br />
-            <em>See your report.</em>
+            <em>Run the workflow.</em>
           </h2>
-          <p>Free to use. No account required. Works with any gym commission spreadsheet.</p>
+          <p>Upload team data, generate reports, and connect it to your daily follow-up process.</p>
         </div>
         <div className="demo-box reveal">
           <div className="demo-box-topbar">
@@ -469,16 +468,16 @@ export default function HomePage() {
                 <sup>$</sup>0<sub> / forever</sub>
               </div>
               <div className="pricing-desc">
-                Everything you need to understand your commissions. No credit card, no catch.
+                Core workflow and reporting tools for teams getting started.
               </div>
               <ul className="pricing-features">
                 <li>Unlimited CSV uploads</li>
-                <li>Google Sheets sync</li>
-                <li>Current period goal tracker</li>
-                <li>FP conversion tracking</li>
-                <li>Pay period trend chart</li>
-                <li>PDF export</li>
-                <li>Dark mode</li>
+                <li>Lead intake and follow-up views</li>
+                <li>Staff queue visibility</li>
+                <li>Report library</li>
+                <li>CSV/PDF export</li>
+                <li>Billing settings</li>
+                <li>Email support</li>
               </ul>
               <button
                 type="button"
@@ -495,14 +494,14 @@ export default function HomePage() {
                 <sup>$</sup>29.99<sub> / month</sub>
               </div>
               <div className="pricing-desc">
-                For serious reps who want deeper insights, team comparisons, and manager sharing.
+                For teams that need governed automations, audit visibility, and priority support.
               </div>
               <ul className="pricing-features">
                 <li>Everything in Free</li>
-                <li>Multi-rep team dashboards</li>
-                <li>Manager sharing link</li>
-                <li>Custom goal amounts</li>
-                <li>Monthly performance emails</li>
+                <li>Automation controls</li>
+                <li>Audit exports</li>
+                <li>Advanced policy controls</li>
+                <li>Priority troubleshooting</li>
                 <li>Priority support</li>
                 <li className="muted">Available soon</li>
               </ul>
@@ -518,12 +517,12 @@ export default function HomePage() {
         <div className="cta-glow"></div>
         <div className="section-label reveal">Get started</div>
         <h2 className="reveal">
-          Stop guessing.
+          Stop patching tools.
           <br />
-          <em>Start knowing.</em>
+          <em>Start running the workflow.</em>
         </h2>
         <p className="reveal">
-          Drop in your spreadsheet and see your full commission report instantly.
+          PipelineIQ helps your team run intake, follow-up, and reporting from one practical system.
         </p>
         <div className="cta-actions reveal">
           <button type="button" className="btn-primary" onClick={scrollToId("demo")}>
@@ -546,7 +545,19 @@ export default function HomePage() {
         <div className="footer-brand">
           Pipeline<span>IQ</span>
         </div>
-        <div className="footer-note">Built for gym sales reps - Free to use - © 2026</div>
+        <div className="footer-note-wrap">
+          <div className="footer-note">PipelineIQ workflow operations - © 2026</div>
+          <div className="footer-links">
+            <Link href="/terms">Terms of Service</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("pipelineiq:open-cookie-settings"))}
+            >
+              Cookie Settings
+            </button>
+          </div>
+        </div>
       </footer>
 
       <style jsx global>{`
@@ -1626,6 +1637,35 @@ export default function HomePage() {
           color: var(--ink-3);
         }
 
+        .footer-note-wrap {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .footer-links {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .footer-links a,
+        .footer-links button {
+          color: var(--ink-2);
+          font-size: 12px;
+          text-decoration: none;
+          background: transparent;
+          border: 0;
+          padding: 0;
+          cursor: pointer;
+          font-family: inherit;
+        }
+
+        .footer-links a:hover,
+        .footer-links button:hover {
+          color: var(--ink);
+        }
+
         .fade-up {
           opacity: 0;
           transform: translateY(24px);
@@ -1730,6 +1770,16 @@ export default function HomePage() {
             flex-direction: column;
             align-items: flex-start;
             gap: 8px;
+          }
+
+          .footer-note-wrap {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+          }
+
+          .footer-links {
+            flex-wrap: wrap;
           }
         }
       `}</style>

@@ -93,7 +93,11 @@ describe("Web API route coverage", () => {
       "apps/web/app/api/checkout/route.ts",
       "apps/web/app/api/dev/enqueue-hello/route.ts",
       "apps/web/app/api/dev/health/route.ts",
+      "apps/web/app/api/health/live/route.ts",
+      "apps/web/app/api/health/ready/route.ts",
       "apps/web/app/api/portal/route.ts",
+      "apps/web/app/api/privacy/delete/route.ts",
+      "apps/web/app/api/privacy/export/route.ts",
       "apps/web/app/api/webhook/stripe/route.ts",
       "apps/web/app/api/webhook/twilio/route.ts",
     ];
@@ -108,6 +112,7 @@ describe("Web API unit + integration + benchmark flows", () => {
       authRole: "owner",
       authUnauthorized: false,
       pgFailure: false,
+      redisFailure: false,
       auditError: null as Error | null,
       auditRows: [
         {
@@ -149,6 +154,10 @@ describe("Web API unit + integration + benchmark flows", () => {
         queuedJobId: "job_1",
         leadId: "lead_1",
       },
+      privacyExportError: null as Error | null,
+      privacyDeleteError: null as Error | null,
+      privacyExportPayload: { generatedAt: "2026-02-27T00:00:00.000Z", userId: "user_1" },
+      privacyDeleteMode: "delete",
       logCalls: [] as Array<{ route: string }>,
       refCounter: 0,
     };
@@ -249,6 +258,27 @@ describe("Web API unit + integration + benchmark flows", () => {
           },
         },
       }),
+      mock.module("@/lib/redis-health", {
+        namedExports: {
+          pingRedis: async () => {
+            if (state.redisFailure) {
+              return {
+                ok: false,
+                configured: true,
+                latencyMs: 1,
+                detail: "redis unavailable",
+              };
+            }
+
+            return {
+              ok: true,
+              configured: true,
+              latencyMs: 1,
+              detail: "PONG",
+            };
+          },
+        },
+      }),
       mock.module("@/lib/subscription", {
         namedExports: {
           getUserSubscription: async () => ({
@@ -268,6 +298,19 @@ describe("Web API unit + integration + benchmark flows", () => {
           createInboundMessageFromWebhook: async () => {
             if (state.twilioInboundError) throw state.twilioInboundError;
             return state.twilioInboundResult;
+          },
+        },
+      }),
+      mock.module("@/lib/privacy", {
+        namedExports: {
+          exportUserData: async () => {
+            if (state.privacyExportError) throw state.privacyExportError;
+            return state.privacyExportPayload;
+          },
+          processPrivacyRequest: async (_userId: string, mode: string) => {
+            if (state.privacyDeleteError) throw state.privacyDeleteError;
+            state.privacyDeleteMode = mode;
+            return { ok: true, mode };
           },
         },
       }),
@@ -319,11 +362,23 @@ describe("Web API unit + integration + benchmark flows", () => {
       const healthRoute = await importFresh<RouteModule>(
         repoPath("apps/web/app/api/dev/health/route.ts"),
       );
+      const healthLiveRoute = await importFresh<RouteModule>(
+        repoPath("apps/web/app/api/health/live/route.ts"),
+      );
+      const healthReadyRoute = await importFresh<RouteModule>(
+        repoPath("apps/web/app/api/health/ready/route.ts"),
+      );
       const auditRoute = await importFresh<RouteModule>(
         repoPath("apps/web/app/api/audit/export/route.ts"),
       );
       const portalRoute = await importFresh<RouteModule>(
         repoPath("apps/web/app/api/portal/route.ts"),
+      );
+      const privacyExportRoute = await importFresh<RouteModule>(
+        repoPath("apps/web/app/api/privacy/export/route.ts"),
+      );
+      const privacyDeleteRoute = await importFresh<RouteModule>(
+        repoPath("apps/web/app/api/privacy/delete/route.ts"),
       );
       const checkoutRoute = await importFresh<RouteModule>(
         repoPath("apps/web/app/api/checkout/route.ts"),
@@ -378,6 +433,28 @@ describe("Web API unit + integration + benchmark flows", () => {
       assert.match(healthFailureBody.referenceId, /^ref-/);
 
       state.pgFailure = false;
+      state.redisFailure = false;
+      const liveHealth = await healthLiveRoute.GET?.();
+      assert.ok(liveHealth);
+      assert.equal(liveHealth.status, 200);
+
+      const readyHealth = await healthReadyRoute.GET?.();
+      assert.ok(readyHealth);
+      assert.equal(readyHealth.status, 200);
+
+      state.pgFailure = true;
+      const readyDbDown = await healthReadyRoute.GET?.();
+      assert.ok(readyDbDown);
+      assert.equal(readyDbDown.status, 503);
+
+      state.pgFailure = false;
+      state.redisFailure = true;
+      const readyRedisDown = await healthReadyRoute.GET?.();
+      assert.ok(readyRedisDown);
+      assert.equal(readyRedisDown.status, 503);
+      state.redisFailure = false;
+
+      state.pgFailure = false;
       state.auditError = null;
       const auditResult = await measureMs(() =>
         auditRoute.GET?.(new Request("https://example.com/api/audit/export?limit=50")),
@@ -396,6 +473,75 @@ describe("Web API unit + integration + benchmark flows", () => {
       const auditForbiddenBody = (await jsonBody(auditForbidden)) as { referenceId: string };
       assert.match(auditForbiddenBody.referenceId, /^ref-/);
       state.auditError = null;
+
+      state.privacyExportError = null;
+      const privacyExportResponse = await measureMs(() => privacyExportRoute.GET?.());
+      assert.ok(privacyExportResponse.value);
+      assert.equal(privacyExportResponse.value.status, 200);
+      assert.match(
+        privacyExportResponse.value.headers.get("content-disposition") ?? "",
+        /pipelineiq-data-export/i,
+      );
+      assertUnder(
+        privacyExportResponse.ms,
+        API_BENCHMARK_MS,
+        "Privacy export endpoint exceeded latency target",
+      );
+
+      state.privacyExportError = new Error("export failed");
+      const privacyExportFailure = await privacyExportRoute.GET?.();
+      assert.ok(privacyExportFailure);
+      assert.equal(privacyExportFailure.status, 500);
+      const privacyExportFailureBody = (await jsonBody(privacyExportFailure)) as {
+        referenceId: string;
+      };
+      assert.match(privacyExportFailureBody.referenceId, /^ref-/);
+      state.privacyExportError = null;
+
+      const privacyDeleteMissingConfirm = await privacyDeleteRoute.POST?.(
+        new Request("https://example.com/api/privacy/delete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "delete" }),
+        }),
+      );
+      assert.ok(privacyDeleteMissingConfirm);
+      assert.equal(privacyDeleteMissingConfirm.status, 400);
+
+      state.privacyDeleteError = null;
+      const privacyDeleteResponse = await measureMs(() =>
+        privacyDeleteRoute.POST?.(
+          new Request("https://example.com/api/privacy/delete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "delete", confirmation: "DELETE" }),
+          }),
+        ),
+      );
+      assert.ok(privacyDeleteResponse.value);
+      assert.equal(privacyDeleteResponse.value.status, 200);
+      assert.equal(state.privacyDeleteMode, "delete");
+      assertUnder(
+        privacyDeleteResponse.ms,
+        API_BENCHMARK_MS,
+        "Privacy delete endpoint exceeded latency target",
+      );
+
+      state.privacyDeleteError = new Error("privacy failed");
+      const privacyDeleteFailure = await privacyDeleteRoute.POST?.(
+        new Request("https://example.com/api/privacy/delete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "anonymize" }),
+        }),
+      );
+      assert.ok(privacyDeleteFailure);
+      assert.equal(privacyDeleteFailure.status, 500);
+      const privacyDeleteFailureBody = (await jsonBody(privacyDeleteFailure)) as {
+        referenceId: string;
+      };
+      assert.match(privacyDeleteFailureBody.referenceId, /^ref-/);
+      state.privacyDeleteError = null;
 
       await withEnv("STRIPE_SECRET_KEY", "sk_test", async () => {
         await withEnv("NEXT_PUBLIC_APP_URL", "https://app.pipelineiq.test", async () => {
@@ -559,6 +705,8 @@ describe("Web API unit + integration + benchmark flows", () => {
       assert.ok(loggedRoutes.has("app/api/dev/health"));
       assert.ok(loggedRoutes.has("app/api/audit/export"));
       assert.ok(loggedRoutes.has("app/api/portal"));
+      assert.ok(loggedRoutes.has("app/api/privacy/delete"));
+      assert.ok(loggedRoutes.has("app/api/privacy/export"));
       assert.ok(loggedRoutes.has("app/api/checkout"));
       assert.ok(loggedRoutes.has("app/api/webhook/stripe"));
       assert.ok(loggedRoutes.has("app/api/webhook/twilio"));

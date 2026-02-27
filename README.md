@@ -1,23 +1,24 @@
-# PipelineIQ GoldBot SaaS
+# PipelineIQ SaaS
 
-PipelineIQ is the GoldBot multi-tenant SaaS app for lead intake, governed SMS automation, booking, and operations visibility.
+PipelineIQ is the primary multi-tenant SaaS product for lead intake, follow-up workflow, governed SMS automation, booking, and operations visibility.
 
 This repository is the **source of truth** for the SaaS implementation (Next.js web app + worker service).
+GoldBot in this repo is an internal/experimental automation module name kept for compatibility.
 Legacy Tauri/Rust GoldBot code is not part of this tree.
 
 ## Architecture
 
-- `app/`: Next.js App Router dashboard, server actions, API routes
-- `services/worker/`: durable job runner, state machine, governor, action gateway, provider adapters
+- `apps/web/`: Next.js App Router dashboard, server actions, API routes
+- `apps/worker/`: durable job runner, state machine, governor, action gateway, provider adapters
 - `supabase/migrations/`: Postgres schema and migration history
-- `lib/goldbot.ts`: org-scoped data access + dashboard queries for the SaaS workflow
+- `apps/web/lib/goldbot.ts`: org-scoped data access + dashboard queries for the PipelineIQ workflow (module name retained for compatibility)
 
 Core flow:
 
 1. Lead intake or inbound webhook writes domain rows.
 2. Durable job is enqueued in `jobs`.
 3. Worker evaluates state machine actions.
-4. Governor validates each action (kill switch, consent, business hours, throttles, autonomy mode).
+4. Governor validates each action (kill switch, consent, business hours, throttles, automation mode).
 5. Action gateway performs writes/external calls and records `audit_log` rows.
 
 ## Prerequisites
@@ -71,13 +72,18 @@ Required web keys (`apps/web/.env.example`):
 Optional:
 
 - `DEV_USER_ID` (local fallback when Clerk is not configured)
+- `NEXT_PUBLIC_ENABLE_EXPERIMENTAL_GOLDBOT` (`true` exposes experimental GoldBot nav/pages; default hidden)
 - `TWILIO_VERIFY_SIGNATURE`
 - `TWILIO_WEBHOOK_URL`
+- `REDIS_URL` (used by readiness checks / cache integrations)
+- `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE`
 
 ### Worker (`.env.local` or worker env)
 
 - `DATABASE_URL` (or `WORKER_DATABASE_URL`)
+- `REDIS_URL` (optional cache health check)
 - `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` (for real SMS)
+- `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE` (optional)
 
 Booking provider vars (Google Calendar adapter):
 
@@ -97,7 +103,7 @@ Run Supabase migrations (recommended) so web and worker schema match:
 Then seed local demo data:
 
 ```bash
-npm --prefix services/worker run seed
+npm --prefix apps/worker run seed
 ```
 
 Seed creates:
@@ -113,7 +119,7 @@ Install dependencies:
 
 ```bash
 npm install
-npm --prefix services/worker install
+npm --prefix apps/worker install
 ```
 
 Run web app:
@@ -140,13 +146,24 @@ Run both:
 npm run dev:all
 ```
 
+## Docker Compose
+
+Build and run web + worker + Postgres + Redis:
+
+```bash
+cp .env.docker.example .env
+docker compose up --build
+```
+
+The compose stack is variable-driven (`${...}`), so environment-specific values can be provided via `.env` or shell variables.
+
 ## Clerk Configuration
 
 1. Create a Clerk app.
 2. Configure env keys in `.env.local`.
 3. Enable Organizations in Clerk.
 4. Use an active organization in the UI; app access is scoped to org membership (`owner` vs `staff`).
-5. Owner-only controls: kill switch + automation/autonomy settings.
+5. Owner-only controls: kill switch + automation settings.
 
 ## Supabase Configuration
 
@@ -177,7 +194,7 @@ The worker supports booking via provider adapter:
 
 Location-level settings in `/dashboard/settings/automation` control:
 
-- `autonomy_mode`: `suggest_only` or `safe_auto`
+- `autonomy_mode` (internal key): `suggest_only` or `safe_auto`
 - `booking_provider`
 - `booking_settings_json`
 
@@ -196,6 +213,42 @@ Notes:
 
 - Some worker integration tests skip automatically when Postgres env is unavailable.
 - Unit coverage includes governor edge cases, action-gateway idempotency, and retry/dead-letter behavior.
+
+## Health Checks
+
+- Web liveness: `GET /api/health/live`
+- Web readiness: `GET /api/health/ready`
+- Worker liveness: `GET /health/live` (on `WORKER_HEALTH_PORT`)
+- Worker readiness: `GET /health/ready` (on `WORKER_HEALTH_PORT`)
+
+Readiness checks validate database connectivity and Redis availability (when `REDIS_URL` is configured).
+
+## Error Reporting (Sentry)
+
+Set `SENTRY_DSN` (and optionally `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`) to enable server/worker error forwarding to Sentry.
+
+## CI/CD and Deployment
+
+GitHub Actions workflow at `.github/workflows/ci.yml` runs:
+
+1. Lint + typecheck + tests
+2. Docker image build
+3. Deploy to Google Cloud Run on push to `main`
+
+Required deployment configuration:
+
+- Secret: `GCP_SA_KEY`
+- Repo vars: `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`
+- Optional repo vars: `GCP_ARTIFACT_REPOSITORY`, `DEPLOY_IMAGE_NAME`, `CLOUD_RUN_ENV_VARS`
+
+## Database Backups
+
+- Script: `scripts/backup-db.sh`
+- Schedule: `.github/workflows/db-backup.yml` (daily)
+- Storage target controlled by vars:
+  - `BACKUP_PROVIDER` (`gcs` or `s3`)
+  - `BACKUP_BUCKET`
+  - `BACKUP_PREFIX` (optional)
 
 ## Operational Dashboard + Export
 

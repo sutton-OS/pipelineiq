@@ -17,7 +17,7 @@ export default function GoldBotError({ error, reset }: GoldBotErrorProps) {
 
   useEffect(() => {
     console.error("[dashboard_error]", {
-      group: "goldbot",
+      group: "workflow",
       referenceId,
       message: error.message,
       stack: error.stack,
@@ -27,8 +27,8 @@ export default function GoldBotError({ error, reset }: GoldBotErrorProps) {
   return (
     <main className="grid min-h-[60vh] place-items-center px-6 py-10">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-white p-8 shadow-[0_16px_36px_rgba(26,26,26,0.08)]">
-        <p className="text-xs uppercase tracking-[0.11em] text-ink-2">GoldBot Operations</p>
-        <h1 className="mt-3 font-serif text-3xl leading-tight">GoldBot dashboard error</h1>
+        <p className="text-xs uppercase tracking-[0.11em] text-ink-2">PipelineIQ Workflow</p>
+        <h1 className="mt-3 font-serif text-3xl leading-tight">Workflow dashboard error</h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-2">
           This dashboard view failed to load. Retry to request fresh data.
         </p>

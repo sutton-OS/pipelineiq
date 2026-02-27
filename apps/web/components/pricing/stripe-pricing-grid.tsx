@@ -95,7 +95,7 @@ export function StripePricingGrid({
           <ul className="space-y-2 text-sm text-ink-2">
             <li>• Unlimited reports</li>
             <li>• CSV + PDF export</li>
-            <li>• GoldBot automation controls</li>
+            <li>• Workflow automation controls</li>
             <li>• Audit exports</li>
             <li>• Priority support</li>
           </ul>

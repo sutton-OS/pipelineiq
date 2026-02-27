@@ -315,7 +315,7 @@ export async function ensureOrgAndLocation(userId: string): Promise<OrgLocationC
     }
 
     if (!orgRow) {
-      const defaultOrgName = "GoldBot Org";
+      const defaultOrgName = "PipelineIQ Org";
       const ownerUserIdForInsert =
         requestScope.clerkOrgId && requestScope.role !== "owner"
           ? `clerk-org-owner:${requestScope.clerkOrgId}`

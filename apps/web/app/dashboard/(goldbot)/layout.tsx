@@ -3,8 +3,8 @@ import { GOLDBOT_DASHBOARD_ENV_KEYS, requireEnv } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: {
-    default: "GoldBot",
-    template: "GoldBot — %s",
+    default: "Workflow",
+    template: "Workflow — %s",
   },
 };
 

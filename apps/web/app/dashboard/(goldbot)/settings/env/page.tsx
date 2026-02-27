@@ -90,7 +90,7 @@ export default async function EnvironmentStatusPage() {
 
       <Card className="border-border bg-white/70">
         <CardHeader>
-          <CardTitle>GoldBot Required Keys</CardTitle>
+          <CardTitle>Workflow Required Keys</CardTitle>
         </CardHeader>
         <CardContent>
           <KeyList keys={GOLDBOT_DASHBOARD_ENV_KEYS} presentSet={presentSet} />

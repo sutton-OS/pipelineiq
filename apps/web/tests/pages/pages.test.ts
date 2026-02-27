@@ -34,6 +34,8 @@ const PAGE_FILES = [
   "apps/web/app/dashboard/(reports)/upload/page.tsx",
   "apps/web/app/page.tsx",
   "apps/web/app/pricing/page.tsx",
+  "apps/web/app/privacy/page.tsx",
+  "apps/web/app/terms/page.tsx",
 ];
 
 const DASHBOARD_CONTEXT = {

@@ -16,21 +16,16 @@ jobs:
     if: ${{ vars.ENABLE_DB_BACKUP == 'true' }}
     runs-on: ubuntu-latest
     env:
-      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_PROVIDER: ${{ vars.BACKUP_PROVIDER || 'gcs' }}
       BACKUP_BUCKET: ${{ vars.BACKUP_BUCKET }}
-      BACKUP_PROVIDER: ${{ vars.BACKUP_PROVIDER }}
+      BACKUP_PREFIX: ${{ vars.BACKUP_PREFIX || 'pipelineiq' }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
     steps:
-      - name: Install Postgres client
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
-      - name: Generate filenames
-        run: |
-          echo "BACKUP_FILE=db-$(date -u +%Y%m%dT%H%M%SZ).dump" >> $GITHUB_ENV
-          echo "BACKUP_OBJECT=backups/$BACKUP_FILE" >> $GITHUB_ENV
-
-      - name: Dump database
-        run: pg_dump --format=custom --file="$BACKUP_FILE" "$BACKUP_DATABASE_URL"
 
       - name: Authenticate to Google Cloud
         if: ${{ env.BACKUP_PROVIDER == 'gcs' }}
@@ -45,9 +40,13 @@ jobs:
           project_id: ${{ env.GCP_PROJECT_ID }}
           export_default_credentials: true
 
-      - name: Upload dump to GCS
-        if: ${{ env.BACKUP_PROVIDER == 'gcs' }}
-        run: gsutil cp "$BACKUP_FILE" "gs://${BACKUP_BUCKET}/${BACKUP_OBJECT}"
+      - name: Configure AWS credentials
+        if: ${{ env.BACKUP_PROVIDER == 's3' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
-      - name: Cleanup
-        run: rm -f "$BACKUP_FILE"
+      - name: Run backup
+        run: bash scripts/backup-db.sh

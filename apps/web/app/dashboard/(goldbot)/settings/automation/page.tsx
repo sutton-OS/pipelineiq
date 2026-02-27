@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Automation",
+  title: "Automations",
 };
 
 async function submitKillSwitch(formData: FormData) {
@@ -61,8 +61,8 @@ export default async function AutomationSettingsPage({
 
   return (
     <GoldBotPageShell
-      title="Trust Center"
-      subtitle="Safety controls and automation policy for governed operation."
+      title="Automations"
+      subtitle="Safety controls and workflow automation policy."
       headerClassName="items-start gap-6 rounded-2xl border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] px-5 py-5 md:px-6"
       maxWidth="7xl"
       actions={
@@ -97,7 +97,7 @@ export default async function AutomationSettingsPage({
 
       <SectionCard
         title="Kill Switch"
-        description="Hard stop controls that immediately halt autonomous actions at org and location scope."
+        description="Hard stop controls that immediately halt automated actions at org and location scope."
         className={
           hasActiveKillSwitch
             ? "border-red-300/65 bg-[linear-gradient(135deg,rgba(239,68,68,0.14),rgba(239,68,68,0.04))]"
@@ -163,7 +163,7 @@ export default async function AutomationSettingsPage({
 
       <SectionCard
         title="Automation Controls"
-        description="Choose autonomy posture and booking integration. Changes apply to new decisions immediately after save."
+        description="Choose automation mode and booking integration. Changes apply to new decisions immediately after save."
       >
         {!canManageAutomation ? (
           <p className="mb-4 rounded-md border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
