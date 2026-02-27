@@ -1,60 +1,21 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { requireUserId } from "@/lib/auth";
 import {
-  compareBillingTiers,
   createStripeClient,
-  getPriceIdForTier,
+  getProPriceId,
   getStripeSubscriptionPriceId,
-  getTierFromPriceId,
-  getTrialDays,
-  parseBillingTier,
-  type BillingTier,
 } from "@/lib/stripe-billing";
 import { getUserSubscription } from "@/lib/subscription";
 import { logServerError } from "@/lib/server-error";
 
-type CheckoutPayload = {
-  tier?: unknown;
-};
-
-async function getCheckoutTier(request: Request): Promise<{
-  tier: BillingTier;
-  invalid: boolean;
-}> {
-  let payload: CheckoutPayload | null = null;
-  try {
-    payload = (await request.json()) as CheckoutPayload;
-  } catch {
-    return { tier: "pro", invalid: false };
-  }
-
-  if (!payload || !("tier" in payload)) {
-    return { tier: "pro", invalid: false };
-  }
-
-  const parsedTier = parseBillingTier(payload.tier);
-  if (!parsedTier) {
-    return { tier: "pro", invalid: true };
-  }
-
-  return { tier: parsedTier, invalid: false };
-}
-
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId();
-    const { tier, invalid } = await getCheckoutTier(request);
-    if (invalid) {
-      return NextResponse.json(
-        { error: "Invalid plan tier. Choose Basic, Pro, or Enterprise." },
-        { status: 400 },
-      );
-    }
+    void request;
 
     const secretKey = process.env.STRIPE_SECRET_KEY;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const priceId = getPriceIdForTier(tier);
+    const priceId = getProPriceId();
 
     if (!secretKey || !appUrl || !priceId) {
       return NextResponse.json(
@@ -81,42 +42,25 @@ export async function POST(request: Request) {
       if (currentPriceId === priceId) {
         return NextResponse.json({
           changed: false,
-          tier,
-          message: "You are already on that plan.",
+          message: "You are already on Pro.",
         });
       }
 
-      const currentTier = getTierFromPriceId(currentPriceId);
-      const changeDirection =
-        currentTier === null ? 0 : compareBillingTiers(currentTier, tier);
       const updatedSubscription = await stripe.subscriptions.update(existingSubscriptionId, {
         items: [{ id: currentItem.id, price: priceId }],
         proration_behavior: "always_invoice",
         cancel_at_period_end: false,
         metadata: {
           userId,
-          tier,
+          plan: "pro",
         },
       });
 
       return NextResponse.json({
         changed: true,
-        tier,
         subscriptionId: updatedSubscription.id,
-        message:
-          changeDirection > 0
-            ? "Plan upgraded successfully."
-            : "Plan downgraded successfully.",
+        message: "Plan updated successfully.",
       });
-    }
-
-    const trialDays = subscription?.stripe_customer_id ? 0 : getTrialDays();
-    let customerEmail: string | undefined;
-    try {
-      const clerkUser = await currentUser();
-      customerEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? undefined;
-    } catch {
-      customerEmail = undefined;
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -124,20 +68,14 @@ export async function POST(request: Request) {
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      metadata: { userId, tier },
+      metadata: { userId, plan: "pro" },
       client_reference_id: userId,
-      success_url: `${appUrl}/dashboard/settings?success=true&tier=${tier}`,
-      cancel_url: `${appUrl}/pricing?canceled=true&tier=${tier}`,
+      success_url: `${appUrl}/dashboard/settings?success=true`,
+      cancel_url: `${appUrl}/pricing?canceled=true`,
       ...(subscription?.stripe_customer_id
         ? { customer: subscription.stripe_customer_id }
-        : {
-            customer_creation: "always" as const,
-            ...(customerEmail ? { customer_email: customerEmail } : {}),
-          }),
-      subscription_data: {
-        metadata: { userId, tier },
-        ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
-      },
+        : { customer_creation: "always" as const }),
+      subscription_data: { metadata: { userId, plan: "pro" } },
     });
 
     return NextResponse.json({ url: session.url });

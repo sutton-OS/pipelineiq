@@ -37,7 +37,7 @@ export function BillingControls({ isPaid }: BillingControlsProps) {
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild variant={isPaid ? "default" : "outline"}>
-        <Link href="/pricing">{isPaid ? "Change Plan" : "View Pricing Plans"}</Link>
+        <Link href="/pricing">{isPaid ? "View Pro Plan" : "Upgrade to Pro"}</Link>
       </Button>
 
       {isPaid ? (

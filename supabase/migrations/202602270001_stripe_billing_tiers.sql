@@ -1,5 +1,5 @@
 -- Stripe billing subscription lifecycle support:
--- - multi-tier pricing (basic/pro/enterprise)
+-- - single Pro pricing
 -- - trial windows
 -- - invoice/receipt tracking fields
 
@@ -38,7 +38,7 @@ BEGIN
   ) THEN
     ALTER TABLE user_subscriptions
       ADD CONSTRAINT user_subscriptions_plan_tier_check
-      CHECK (plan_tier IN ('free', 'basic', 'pro', 'enterprise'));
+      CHECK (plan_tier IN ('free', 'pro'));
   END IF;
 END $$;
 
@@ -53,5 +53,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_subscriptions_subscription_uidx
   ON user_subscriptions (stripe_subscription_id)
   WHERE stripe_subscription_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS user_subscriptions_status_tier_idx
+CREATE INDEX IF NOT EXISTS user_subscriptions_status_plan_idx
   ON user_subscriptions (status, plan_tier);

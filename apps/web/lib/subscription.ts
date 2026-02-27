@@ -1,4 +1,3 @@
-import { getTierFromPriceId, normalizePlanTier, type PlanTier } from "@/lib/stripe-billing";
 import { createServerClient } from "@/lib/supabase";
 
 type UserSubscription = {
@@ -33,26 +32,12 @@ function getEntitlementExpiry(subscription: UserSubscription | null): Date | nul
   return expiry ? new Date(expiry) : null;
 }
 
-function inferPlanTier(subscription: UserSubscription | null): PlanTier {
+function inferPlanTier(subscription: UserSubscription | null): "pro" | "free" {
   if (!subscription) {
     return "free";
   }
 
-  if (subscription.plan_tier) {
-    return normalizePlanTier(subscription.plan_tier);
-  }
-
-  const derivedFromPrice = getTierFromPriceId(subscription.stripe_price_id ?? null);
-  if (derivedFromPrice) {
-    return derivedFromPrice;
-  }
-
-  if (subscription.status === "active" && subscription.stripe_subscription_id) {
-    // Backward compatibility with older rows that only tracked a single Pro plan.
-    return "pro";
-  }
-
-  return "free";
+  return subscription.stripe_subscription_id ? "pro" : "free";
 }
 
 export async function getUserSubscription(userId: string) {
@@ -78,7 +63,6 @@ export async function getUserSubscription(userId: string) {
     isPaid,
     isPro: isPaid,
     planTier,
-    isEnterprise: isPaid && planTier === "enterprise",
     subscription,
   };
 }

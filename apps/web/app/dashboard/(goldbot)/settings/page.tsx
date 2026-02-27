@@ -61,7 +61,7 @@ export default async function SettingsPage() {
   const userId = await requireUserId();
   const supabase = createServerClient();
 
-  const [{ isPaid, planTier }, { data: team }] = await Promise.all([
+  const [{ isPaid, isPro }, { data: team }] = await Promise.all([
     getUserSubscription(userId),
     supabase
       .from("teams")
@@ -74,14 +74,7 @@ export default async function SettingsPage() {
 
   const teamName = team?.name ?? "My Team";
   const monthlyGoal = Number(team?.goal_monthly ?? 0);
-  const currentPlanLabel =
-    planTier === "enterprise"
-      ? "Enterprise"
-      : planTier === "pro"
-        ? "Pro"
-        : planTier === "basic"
-          ? "Basic"
-          : "Free";
+  const currentPlanLabel = isPro ? "Pro" : "Free";
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -100,25 +93,18 @@ export default async function SettingsPage() {
             <CardTitle>Current Plan: {currentPlanLabel}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-border bg-paper p-4">
-                <h3 className="font-medium text-ink">Basic</h3>
+                <h3 className="font-medium text-ink">Free</h3>
                 <p className="mt-2 text-sm text-ink-2">
-                  Unlimited reports, CSV upload, PDF export
+                  3 reports, CSV upload, PDF export
                 </p>
               </div>
 
               <div className="rounded-lg border border-border bg-paper p-4">
                 <h3 className="font-medium text-ink">Pro</h3>
                 <p className="mt-2 text-sm text-ink-2">
-                  Automation controls, audit exports, priority support
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-border bg-paper p-4">
-                <h3 className="font-medium text-ink">Enterprise</h3>
-                <p className="mt-2 text-sm text-ink-2">
-                  Dedicated onboarding, SLA-backed support, billing reviews
+                  Unlimited reports, automation controls, audit exports, priority support
                 </p>
               </div>
             </div>

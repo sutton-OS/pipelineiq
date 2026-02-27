@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { StripePricingGrid } from "@/components/pricing/stripe-pricing-grid";
-import { Card, CardContent } from "@/components/ui/card";
 import { requireUserId } from "@/lib/auth";
-import { getTrialDays } from "@/lib/stripe-billing";
 import { getUserSubscription } from "@/lib/subscription";
 
 export const metadata: Metadata = {
@@ -18,11 +16,10 @@ export default async function PricingPage() {
     userId = null;
   }
 
-  const trialDays = getTrialDays();
-  let currentTier: "free" | "basic" | "pro" | "enterprise" = "free";
+  let isPro = false;
   if (userId) {
-    const { planTier } = await getUserSubscription(userId);
-    currentTier = planTier;
+    const subscription = await getUserSubscription(userId);
+    isPro = subscription.isPro;
   }
 
   return (
@@ -31,24 +28,12 @@ export default async function PricingPage() {
         <p className="text-xs uppercase tracking-[0.08em] text-ink-2">Stripe Billing</p>
         <h1 className="text-5xl font-serif leading-tight">Pricing & Subscription Plans</h1>
         <p className="max-w-3xl text-sm text-ink-2 md:text-base">
-          Choose the plan that fits your team, start a free trial, and switch plans at any time.
-          Stripe handles invoicing and receipts automatically after successful payments.
+          PipelineIQ uses a single Pro subscription plan. Stripe handles invoicing and receipts
+          automatically after successful payments.
         </p>
       </header>
 
-      {trialDays > 0 ? (
-        <Card className="border-border bg-white/70">
-          <CardContent className="py-4 text-sm text-ink-2">
-            All new subscriptions include a <strong>{trialDays}-day free trial</strong>.
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <StripePricingGrid
-        currentTier={currentTier}
-        isAuthenticated={!!userId}
-        trialDays={trialDays}
-      />
+      <StripePricingGrid isPro={isPro} isAuthenticated={!!userId} />
 
       <div className="text-sm text-ink-2">
         Need custom procurement or annual terms?{" "}

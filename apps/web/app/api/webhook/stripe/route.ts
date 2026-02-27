@@ -3,7 +3,6 @@ import Stripe from "stripe";
 import {
   createStripeClient,
   getStripeSubscriptionPriceId,
-  getTierFromPriceId,
   toIsoFromUnix,
 } from "@/lib/stripe-billing";
 import { createServerClient } from "@/lib/supabase";
@@ -96,11 +95,10 @@ function buildSubscriptionStateUpdate(subscription: Stripe.Subscription) {
   const currentPeriodEnd =
     periodSource.current_period_end ?? firstItem?.current_period_end ?? null;
   const stripePriceId = getStripeSubscriptionPriceId(subscription);
-  const planTier = getTierFromPriceId(stripePriceId) ?? "pro";
 
   return {
     status: subscription.status,
-    plan_tier: planTier,
+    plan_tier: "pro",
     stripe_price_id: stripePriceId,
     active_until: toIsoFromUnix(currentPeriodEnd),
     current_period_start: toIsoFromUnix(currentPeriodStart),
@@ -190,7 +188,6 @@ export async function POST(request: Request) {
 
         const invoicePeriodEnd = getInvoicePeriodEnd(invoice);
         const invoicePriceId = getInvoicePriceId(invoice);
-        const invoiceTier = getTierFromPriceId(invoicePriceId);
 
         await supabase
           .from("user_subscriptions")
@@ -203,7 +200,7 @@ export async function POST(request: Request) {
                 }
               : {}),
             ...(invoicePriceId ? { stripe_price_id: invoicePriceId } : {}),
-            ...(invoiceTier ? { plan_tier: invoiceTier } : {}),
+            plan_tier: "pro",
             last_invoice_id: invoice.id,
             last_invoice_url: invoice.hosted_invoice_url ?? null,
             last_invoice_pdf: invoice.invoice_pdf ?? null,

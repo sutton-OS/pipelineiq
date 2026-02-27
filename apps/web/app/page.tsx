@@ -460,7 +460,7 @@ export default function HomePage() {
             <h2>
               Simple, <em>honest</em> pricing.
             </h2>
-            <p>Choose Basic, Pro, or Enterprise on the dedicated pricing page.</p>
+            <p>PipelineIQ uses a single Pro subscription plan.</p>
           </div>
           <div className="pricing-cards">
             <div className="pricing-card reveal">
