@@ -225,6 +225,28 @@ function formatPayPeriodShortLabel(label: string) {
   return normalized.length > 10 ? `${normalized.slice(0, 10)}...` : normalized;
 }
 
+function extractMonthIndexFromLabel(label: string) {
+  const normalized = label.trim();
+  if (!normalized) return null;
+
+  const namedMonth = normalized.match(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i
+  );
+  if (namedMonth) {
+    const monthToken = namedMonth[1].slice(0, 3).toLowerCase();
+    const monthIndex = SHORT_MONTHS.findIndex((month) => month.toLowerCase() === monthToken);
+    if (monthIndex >= 0) return monthIndex;
+  }
+
+  const numericMonth = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\b/);
+  if (numericMonth) {
+    const monthIndex = Number.parseInt(numericMonth[1], 10) - 1;
+    if (monthIndex >= 0 && monthIndex < SHORT_MONTHS.length) return monthIndex;
+  }
+
+  return null;
+}
+
 function formatSvgNumber(value: number) {
   if (!Number.isFinite(value)) return "0";
   return value.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
@@ -294,7 +316,11 @@ function buildCommissionReport(data: ParsedCommissionData, selectedYear: number)
 
   const currentPeriodRowsForYear = thisYearRows.filter((row) => row.inCurrentPayPeriod);
   const currentCommission = currentPeriodRowsForYear.reduce((sum, row) => sum + row.commission, 0);
-  const currentUnits = currentPeriodRowsForYear.reduce((sum, row) => sum + row.units, 0);
+  const currentMonthIndex = new Date().getMonth();
+  const currentUnits = thisYearPeriods.reduce((sum, period) => {
+    if (extractMonthIndexFromLabel(period.label) !== currentMonthIndex) return sum;
+    return sum + period.units;
+  }, 0);
   const currentSalesRows = currentPeriodRowsForYear.filter((row) => row.commission > 0);
   const currentSales = currentSalesRows.length;
   const currentFP = currentPeriodRowsForYear.filter((row) => row.hasTrainer).length;
@@ -1519,7 +1545,7 @@ export function ReportUploader({
           ${formatUnits(report.currentPayPeriod.currentUnits)}
           <span class="current-period-units">units</span>
         </div>
-        <div class="current-period-sub">units so far</div>
+        <div class="current-period-sub">units for month</div>
       </div>
     </div>
     <div class="current-goal-block">
