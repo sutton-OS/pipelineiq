@@ -55,6 +55,7 @@ type CommissionReport = {
 
 type ParsedTransactionRow = {
   year: number | null;
+  transactionDate?: string | null;
   commission: number;
   units: number;
   membershipType: MembershipKey;
@@ -317,10 +318,18 @@ function buildCommissionReport(data: ParsedCommissionData, selectedYear: number)
   const currentPeriodRowsForYear = thisYearRows.filter((row) => row.inCurrentPayPeriod);
   const currentCommission = currentPeriodRowsForYear.reduce((sum, row) => sum + row.commission, 0);
   const currentMonthIndex = new Date().getMonth();
-  const currentUnits = thisYearPeriods.reduce((sum, period) => {
+  const monthDatedRows = thisYearRows.filter((row) => {
+    if (!row.transactionDate) return false;
+    const parsed = new Date(row.transactionDate);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return parsed.getMonth() === currentMonthIndex;
+  });
+  const currentUnitsFromRows = monthDatedRows.reduce((sum, row) => sum + row.units, 0);
+  const currentUnitsFromPayPeriods = thisYearPeriods.reduce((sum, period) => {
     if (extractMonthIndexFromLabel(period.label) !== currentMonthIndex) return sum;
     return sum + period.units;
   }, 0);
+  const currentUnits = monthDatedRows.length > 0 ? currentUnitsFromRows : currentUnitsFromPayPeriods;
   const currentSalesRows = currentPeriodRowsForYear.filter((row) => row.commission > 0);
   const currentSales = currentSalesRows.length;
   const currentFP = currentPeriodRowsForYear.filter((row) => row.hasTrainer).length;
