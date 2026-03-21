@@ -392,14 +392,6 @@ export function ReportUploader({
   const [parseError, setParseError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(initialParsedData);
-  const [darkMode, setDarkMode] = useState(() => {
-    try {
-      const savedPreference = localStorage.getItem("piq-dark");
-      return savedPreference === null ? true : savedPreference === "true";
-    } catch {
-      return true;
-    }
-  });
 
   useEffect(() => {
     if (initialParsedData !== undefined) {
@@ -441,12 +433,6 @@ export function ReportUploader({
       : availableYears[availableYears.length - 1];
     setSelectedYear(fallbackYear);
   }, [availableYears, selectedYear]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("piq-dark", String(darkMode));
-    } catch {}
-  }, [darkMode]);
 
   const report = useMemo(() => {
     if (!parsedData) return null;
@@ -866,20 +852,20 @@ export function ReportUploader({
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --ink: #0f0f0f;
-    --ink-2: #3a3a3a;
-    --ink-3: #888;
-    --paper: #f7f5f0;
-    --paper-2: #eceae4;
-    --paper-3: #e0ddd6;
-    --accent: #c8491a;
-    --green: #1a6e3c;
-    --green-light: #e2f0e8;
-    --amber: #b07d00;
-    --amber-light: #fdf4d8;
-    --border: #d8d5ce;
-    --blue: #1a4fa0;
-    --blue-light: #e8f0fe;
+    --ink: #f2f3f5;
+    --ink-2: #9098a8;
+    --ink-3: #4a5060;
+    --paper: #0e0f13;
+    --paper-2: #1e2028;
+    --paper-3: #272a33;
+    --accent: #e05a20;
+    --green: #22c55e;
+    --green-light: rgba(34, 197, 94, 0.1);
+    --amber: #f59e0b;
+    --amber-light: rgba(245, 158, 11, 0.1);
+    --border: #272a33;
+    --blue: #3b82f6;
+    --blue-light: rgba(59, 130, 246, 0.1);
   }
   body {
     background: var(--paper);
@@ -931,7 +917,7 @@ export function ReportUploader({
 
   /* CURRENT PERIOD */
   .current-period-card {
-    background: var(--ink);
+    background: #0d0f14;
     border: none;
     color: white;
     border-radius: 8px;
@@ -991,7 +977,7 @@ export function ReportUploader({
     margin-bottom: 20px;
     border-radius: 8px;
     border: 1px dashed var(--border);
-    background: white;
+    background: #16181f;
     color: var(--ink-3);
     font-family: 'DM Mono', monospace;
     font-size: 12px;
@@ -1169,7 +1155,7 @@ export function ReportUploader({
 
   /* HERO BANNER */
   .hero-banner {
-    background: white;
+    background: #16181f;
     border: 1.5px solid var(--border);
     color: var(--ink);
     border-radius: 10px;
@@ -1207,7 +1193,7 @@ export function ReportUploader({
     margin-bottom: 36px;
   }
   .stat-card {
-    background: white;
+    background: #16181f;
     border: 1.5px solid var(--border);
     border-radius: 8px;
     padding: 18px 20px;
@@ -1334,7 +1320,7 @@ export function ReportUploader({
 
   /* BOTTOM GRID */
   .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 36px; }
-  .card { background: white; border: 1.5px solid var(--border); border-radius: 8px; padding: 22px 24px; }
+  .card { background: #16181f; border: 1.5px solid var(--border); border-radius: 8px; padding: 22px 24px; }
   .card { transition: background 0.3s ease, border-color 0.3s ease; }
   .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-bottom: 18px; }
 
@@ -1368,7 +1354,7 @@ export function ReportUploader({
   /* MONTHLY TREND */
   .trend-bars { display: flex; align-items: flex-end; gap: 8px; height: 80px; padding-top: 8px; }
   .trend-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
-  .trend-bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--ink); min-height: 4px; }
+  .trend-bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--accent); min-height: 4px; }
   .trend-month { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--ink-3); text-transform: uppercase; }
   .trend-val { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--ink-3); }
 
@@ -1397,7 +1383,7 @@ export function ReportUploader({
     cursor: pointer;
   }
   .year-btn-active {
-    background: var(--ink);
+    background: var(--accent);
     color: #ffffff;
   }
   .year-btn-inactive {
@@ -1414,99 +1400,79 @@ export function ReportUploader({
   }
   .theme-toggle-btn:hover { opacity: 0.7; }
 
-  /* DARK MODE */
-  .dm {
-    --dm-bg: #111318;
-    --dm-surface: #1c1f26;
-    --dm-surface-2: #23272f;
-    --dm-border: #2e3340;
-    --dm-ink: #f0f2f5;
-    --dm-ink-2: #9aa0b0;
-    --dm-ink-3: #5a6070;
-    --dm-accent: #e05a20;
-    --paper: var(--dm-bg);
-    --paper-2: var(--dm-surface-2);
-    --paper-3: var(--dm-border);
-    --border: var(--dm-border);
-    --ink: var(--dm-ink);
-    --ink-2: var(--dm-ink-2);
-    --ink-3: var(--dm-ink-3);
-    --accent: var(--dm-accent);
-    background: #111318;
-    color: #f0f2f5;
+  /* Dark mode card/surface overrides */
+  .page {
+    background: var(--paper);
+    color: var(--ink);
   }
-  .dm .page {
-    background: var(--dm-bg);
-    color: var(--dm-ink);
+  .card,
+  .stat-card {
+    background: #16181f;
+    border-color: var(--border);
   }
-  .dm .card,
-  .dm .stat-card {
-    background: var(--dm-surface);
-    border-color: var(--dm-border);
-  }
-  .dm .current-period-card {
+  .current-period-card {
     background: #0d0f14;
-    border: 1px solid var(--dm-border);
+    border: 1px solid var(--border);
   }
-  .dm .current-goal-bar { background: rgba(255,255,255,0.08); }
-  .dm .current-goal-row { background: rgba(255,255,255,0.04); }
-  .dm .hero-banner {
-    background: var(--dm-surface);
-    border-color: var(--dm-border);
-    color: var(--dm-ink);
+  .current-goal-bar { background: rgba(255,255,255,0.08); }
+  .current-goal-row { background: rgba(255,255,255,0.04); }
+  .hero-banner {
+    background: #16181f;
+    border-color: var(--border);
+    color: var(--ink);
   }
-  .dm .report-header { border-bottom-color: var(--dm-border); }
-  .dm .report-title,
-  .dm .hero-amount,
-  .dm .hero-stat-value,
-  .dm .stat-value,
-  .dm .fp-rate-big,
-  .dm .fp-stat-val,
-  .dm .pay-trend-stat-value {
-    color: var(--dm-ink);
+  .report-header { border-bottom-color: var(--border); }
+  .report-title,
+  .hero-amount,
+  .hero-stat-value,
+  .stat-value,
+  .fp-rate-big,
+  .fp-stat-val,
+  .pay-trend-stat-value {
+    color: var(--ink);
   }
-  .dm .brand-sub,
-  .dm .report-period,
-  .dm .hero-label,
-  .dm .hero-sub,
-  .dm .hero-stat-label,
-  .dm .stat-label,
-  .dm .stat-sub,
-  .dm .card-title,
-  .dm .mem-count,
-  .dm .trainer-rank,
-  .dm .fp-rate-label,
-  .dm .fp-stat-lab,
-  .dm .pay-trend-stat-label,
-  .dm .pay-trend-stat-sub,
-  .dm .year-label {
-    color: var(--dm-ink-3);
+  .brand-sub,
+  .report-period,
+  .hero-label,
+  .hero-sub,
+  .hero-stat-label,
+  .stat-label,
+  .stat-sub,
+  .card-title,
+  .mem-count,
+  .trainer-rank,
+  .fp-rate-label,
+  .fp-stat-lab,
+  .pay-trend-stat-label,
+  .pay-trend-stat-sub,
+  .year-label {
+    color: var(--ink-3);
   }
-  .dm .mem-label { color: var(--dm-ink-2); }
-  .dm .period-name,
-  .dm .mono,
-  .dm .trainer-name { color: var(--dm-ink); }
-  .dm .pay-table th { color: var(--dm-ink-3); }
-  .dm .pay-table thead tr { border-bottom-color: #2e3340; }
-  .dm .pay-table td { border-bottom-color: #23272f; }
-  .dm .pay-table tbody tr:hover { background: #23272f; }
-  .dm svg text { fill: #5a6070; }
-  .dm .chart-grid-line,
-  .dm .pay-trend-grid-line { stroke: #2e3340; }
-  .dm .pay-trend-area { fill-opacity: 0.15; }
-  .dm .pay-trend-tooltip-line { fill: #f0f2f5; }
-  .dm .pay-trend-tooltip-title { fill: #ffffff; }
-  .dm .mini-bar { background: #2e3340; }
-  .dm .mem-track { background: #23272f; }
-  .dm .year-btn-active { background: #f0f2f5; color: #111318; }
-  .dm .year-btn-inactive { background: #23272f; color: #5a6070; }
-  .dm .report-footer { border-top-color: #2e3340; }
-  .dm .footer-brand, .dm .footer-note { color: #5a6070; }
+  .mem-label { color: var(--ink-2); }
+  .period-name,
+  .mono,
+  .trainer-name { color: var(--ink); }
+  .pay-table th { color: var(--ink-3); }
+  .pay-table thead tr { border-bottom-color: #2e3340; }
+  .pay-table td { border-bottom-color: #1e2028; }
+  .pay-table tbody tr:hover { background: #1e2028; }
+  svg text { fill: #4a5060; }
+  .chart-grid-line,
+  .pay-trend-grid-line { stroke: #272a33; }
+  .pay-trend-area { fill-opacity: 0.15; }
+  .pay-trend-tooltip-line { fill: #f2f3f5; }
+  .pay-trend-tooltip-title { fill: #ffffff; }
+  .mini-bar { background: #272a33; }
+  .mem-track { background: #1e2028; }
+  .year-btn-active { background: #f2f3f5; color: #0e0f13; }
+  .year-btn-inactive { background: #1e2028; color: #4a5060; }
+  .report-footer { border-top-color: #272a33; }
+  .footer-brand, .footer-note { color: #4a5060; }
 
   /* EXPORT BTN */
   .export-btn {
     position: fixed; top: 24px; right: 24px;
-    background: var(--ink); color: white; border: none; border-radius: 6px;
+    background: var(--accent); color: white; border: none; border-radius: 6px;
     padding: 9px 18px; font-family: 'Syne', sans-serif; font-size: 12px;
     font-weight: 500; cursor: pointer; letter-spacing: 0.03em;
     display: flex; align-items: center; gap: 7px;
@@ -1944,7 +1910,7 @@ export function ReportUploader({
       @page { size: auto; margin: 10mm; }
       html, body { margin: 0; padding: 0; }
       body {
-        background: ${darkMode ? "#111318" : "#f7f5f0"};
+        background: #0e0f13;
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
       }
@@ -1954,14 +1920,7 @@ export function ReportUploader({
 </html>`);
       printDoc.close();
 
-      if (darkMode) {
-        const darkShell = printDoc.createElement("div");
-        darkShell.className = "dm";
-        darkShell.appendChild(clonedReport);
-        printDoc.body.appendChild(darkShell);
-      } else {
-        printDoc.body.appendChild(clonedReport);
-      }
+      printDoc.body.appendChild(clonedReport);
 
       await new Promise<void>((resolve) => {
         if (printDoc.readyState === "complete") {
@@ -2419,92 +2378,53 @@ export function ReportUploader({
         ) : null}
 
         {report ? (
-          <div className={darkMode ? "dm" : ""}>
-            <div
-              className="space-y-3"
-              style={{ transition: "background 0.3s ease, color 0.3s ease" }}
-            >
-              <div className="flex items-center justify-end gap-2">
-                {availableYears.length > 0 ? (
+          <div
+            className="space-y-3"
+            style={{ transition: "background 0.3s ease, color 0.3s ease" }}
+          >
+            <div className="flex items-center justify-end gap-2">
+              {availableYears.length > 0 ? (
+                <>
+                  <span className="year-label">Viewing:</span>
+                  <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
+                    {availableYears.map((year) => {
+                      const isActive = year === selectedYear;
+                      return (
+                        <button
+                          key={year}
+                          type="button"
+                          onClick={() => setSelectedYear(year)}
+                          className={`year-btn ${
+                            isActive ? "year-btn-active" : "year-btn-inactive"
+                          }`}
+                        >
+                          {year}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                disabled={isGenerating || !report}
+                onClick={exportPdf}
+                className="h-9 border border-[#2f2f2f] bg-[#0f0f0f] px-3.5 text-xs font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
+              >
+                {isGenerating ? (
                   <>
-                    <span className="year-label">Viewing:</span>
-                    <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
-                      {availableYears.map((year) => {
-                        const isActive = year === selectedYear;
-                        return (
-                          <button
-                            key={year}
-                            type="button"
-                            onClick={() => setSelectedYear(year)}
-                            className={`year-btn ${
-                              isActive ? "year-btn-active" : "year-btn-inactive"
-                            }`}
-                          >
-                            {year}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Preparing PDF...
                   </>
-                ) : null}
-                <Button
-                  type="button"
-                  disabled={isGenerating || !report}
-                  onClick={exportPdf}
-                  className="h-9 border border-[#2f2f2f] bg-[#0f0f0f] px-3.5 text-xs font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Preparing PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4" />
-                      Export PDF
-                    </>
-                  )}
-                </Button>
-                <button
-                  type="button"
-                  aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-                  className="theme-toggle-btn"
-                  onClick={() => setDarkMode((current) => !current)}
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 18 18"
-                    style={{
-                      transition: "transform 0.4s ease",
-                      transform: darkMode ? "rotate(180deg)" : "rotate(0deg)",
-                    }}
-                  >
-                    <defs>
-                      <clipPath id="half">
-                        <rect x="0" y="0" width="9" height="18" />
-                      </clipPath>
-                    </defs>
-                    <circle
-                      cx="9"
-                      cy="9"
-                      r="8"
-                      fill="none"
-                      stroke={darkMode ? "rgba(255,255,255,0.6)" : "var(--ink-3)"}
-                      strokeWidth="1.5"
-                    />
-                    <circle
-                      cx="9"
-                      cy="9"
-                      r="8"
-                      clipPath="url(#half)"
-                      fill={darkMode ? "rgba(255,255,255,0.6)" : "var(--ink-3)"}
-                    />
-                  </svg>
-                </button>
-              </div>
-              <div ref={reportExportRef} dangerouslySetInnerHTML={{ __html: reportHTML }} />
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Export PDF
+                  </>
+                )}
+              </Button>
             </div>
+            <div ref={reportExportRef} dangerouslySetInnerHTML={{ __html: reportHTML }} />
           </div>
         ) : null}
       </div>
