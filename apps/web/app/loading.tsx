@@ -1,10 +1,37 @@
 export default function RootLoading() {
   return (
     <main className="grid min-h-screen place-items-center px-6">
-      <div className="w-full max-w-sm rounded-[28px] border border-border/70 bg-white/80 p-8 text-center shadow-[0_24px_80px_rgba(17,24,39,0.08)] backdrop-blur">
-        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-border border-t-accent" />
-        <h1 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-ink">Loading reports</h1>
-        <p className="mt-2 text-sm text-ink-2">Preparing the personal dashboard.</p>
+      <div className="text-center">
+        <div
+          className="mx-auto h-8 w-8 animate-spin rounded-full"
+          style={{
+            border: "2px solid var(--border)",
+            borderTopColor: "var(--accent)",
+          }}
+        />
+        <h1
+          className="mt-5"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            letterSpacing: "-0.3px",
+            color: "var(--ink)",
+          }}
+        >
+          Preparing your report
+        </h1>
+        <p
+          className="mt-2"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--ink-3)",
+          }}
+        >
+          One moment
+        </p>
       </div>
     </main>
   );

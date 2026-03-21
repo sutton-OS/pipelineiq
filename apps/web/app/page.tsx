@@ -6,63 +6,81 @@ import { ReportUploader } from "@/components/ReportUploader";
 
 type ViewMode = "personal" | "team";
 
-const viewTabs: Array<{ key: ViewMode; label: string }> = [
-  { key: "personal", label: "Personal Report" },
-  { key: "team", label: "Team Report" },
-];
-
 export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>("personal");
 
   return (
-    <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col gap-6">
-        <header className="flex flex-col items-center gap-4 pt-2 text-center">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-ink-3">PipelineIQ</p>
-            <h1 className="text-balance text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
-              Commission and team reports in one view.
+    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[960px]">
+        {/* Top bar */}
+        <div className="mb-8 flex items-end justify-between border-b pb-5" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <h1
+              style={{
+                fontFamily: "var(--font-serif)",
+                fontSize: "28px",
+                letterSpacing: "-0.5px",
+                lineHeight: 1.1,
+                color: "var(--ink)",
+              }}
+            >
+              PipelineIQ
             </h1>
-            <p className="mx-auto max-w-2xl text-sm leading-6 text-ink-2 sm:text-base">
-              Switch between the personal commission report and the team report without an auth
-              gate or extra navigation.
+            <p
+              className="mt-1"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--ink-3)",
+              }}
+            >
+              Personal Reports
             </p>
           </div>
 
-          <div className="inline-flex rounded-full border border-border bg-white/85 p-1 shadow-[0_12px_40px_rgba(17,24,39,0.08)] backdrop-blur">
-            {viewTabs.map((tab) => {
-              const active = viewMode === tab.key;
+          {/* Tab switcher */}
+          <div className="flex items-center gap-0.5">
+            {(["personal", "team"] as ViewMode[]).map((mode) => {
+              const active = viewMode === mode;
               return (
                 <button
-                  key={tab.key}
+                  key={mode}
                   type="button"
-                  onClick={() => setViewMode(tab.key)}
-                  className={`rounded-full px-5 py-2 text-sm font-medium transition-all ${
-                    active
-                      ? "bg-ink text-white shadow-sm"
-                      : "text-ink-2 hover:bg-paper-3/70 hover:text-ink"
-                  }`}
+                  onClick={() => setViewMode(mode)}
+                  className="rounded-md px-4 py-2 transition-all"
+                  style={{
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    background: active ? "var(--ink)" : "transparent",
+                    color: active ? "var(--paper)" : "var(--ink-3)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = "var(--paper-3)";
+                      e.currentTarget.style.color = "var(--ink)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = "var(--ink-3)";
+                    }
+                  }}
                 >
-                  {tab.label}
+                  {mode === "personal" ? "Personal Report" : "Team Report"}
                 </button>
               );
             })}
           </div>
-        </header>
+        </div>
 
-        <section className="flex-1">
-          <div className={viewMode === "personal" ? "block" : "hidden"}>
-            <div className="mx-auto w-full rounded-[32px] border border-border/70 bg-white/80 p-4 shadow-[0_24px_80px_rgba(17,24,39,0.08)] backdrop-blur sm:p-6">
-              <ReportUploader />
-            </div>
-          </div>
-
-          <div className={viewMode === "team" ? "block" : "hidden"}>
-            <div className="mx-auto w-full rounded-[32px] border border-border/70 bg-white/80 p-4 shadow-[0_24px_80px_rgba(17,24,39,0.08)] backdrop-blur sm:p-6">
-              <RepRoster />
-            </div>
-          </div>
-        </section>
+        {/* Report content */}
+        {viewMode === "personal" && <ReportUploader />}
+        {viewMode === "team" && <RepRoster />}
       </div>
     </main>
   );

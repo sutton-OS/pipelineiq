@@ -2,26 +2,52 @@ import Link from "next/link";
 
 export default function NotFoundPage() {
   return (
-    <main className="mx-auto flex min-h-[60vh] w-full max-w-2xl flex-col items-center justify-center gap-4 px-6 text-center">
-      <p className="text-xs uppercase tracking-[0.12em] text-[var(--ink-3)]">404</p>
-      <h1 className="text-4xl font-serif text-[var(--ink)]">Page not found</h1>
-      <p className="max-w-md text-sm text-[var(--ink-2)]">
-        The route you requested does not exist. Return to the homepage.
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
+      <p
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "var(--ink-3)",
+        }}
+      >
+        404
       </p>
-      <div className="flex items-center gap-2">
-        <Link
-          href="/"
-          className="inline-flex h-10 items-center rounded-md border border-[var(--border)] px-4 text-sm text-[var(--ink)] hover:bg-[var(--paper-3)]"
-        >
-          Home
-        </Link>
-        <Link
-          href="/"
-          className="inline-flex h-10 items-center rounded-md bg-[var(--ink)] px-4 text-sm font-medium text-white hover:opacity-90"
-        >
-          Reports
-        </Link>
-      </div>
+      <h1
+        style={{
+          fontFamily: "var(--font-serif)",
+          fontSize: "36px",
+          letterSpacing: "-0.5px",
+          color: "var(--ink)",
+        }}
+      >
+        Page not found
+      </h1>
+      <p
+        style={{
+          fontFamily: "var(--font-sans)",
+          fontSize: "14px",
+          color: "var(--ink-2)",
+          maxWidth: "360px",
+          lineHeight: 1.6,
+        }}
+      >
+        The route you requested doesn&apos;t exist. Head back to your reports.
+      </p>
+      <Link
+        href="/"
+        className="mt-2 inline-flex h-10 items-center rounded-md px-5"
+        style={{
+          fontFamily: "var(--font-sans)",
+          fontSize: "13px",
+          fontWeight: 500,
+          background: "var(--ink)",
+          color: "var(--paper)",
+        }}
+      >
+        Back to reports
+      </Link>
     </main>
   );
 }
