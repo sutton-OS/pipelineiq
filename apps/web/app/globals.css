@@ -3,24 +3,31 @@
 @tailwind utilities;
 
 :root {
-  --ink: #f0f2f5;
-  --ink-2: #9aa0b0;
-  --ink-3: #5a6070;
-  --paper: #16181d;
-  --paper-2: #1e2028;
-  --paper-3: #25282f;
+  --ink: #111827;
+  --ink-2: #4b5563;
+  --ink-3: #6b7280;
+  --paper: #f5f1ea;
+  --paper-2: #ffffff;
+  --paper-3: #e5ddd1;
   --accent: #c8491a;
   --accent-light: #f5e8e2;
   --green: #1a6e3c;
   --green-light: #e2f0e8;
   --amber: #b07d00;
   --amber-light: #fdf4d8;
-  --border: #2e3340;
+  --border: #d9d1c6;
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(200, 73, 26, 0.08), transparent 36%),
+    linear-gradient(180deg, #f7f3ed 0%, #f2ede4 100%);
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
+  min-height: 100vh;
 }
 
 /* Mono numbers everywhere they appear */

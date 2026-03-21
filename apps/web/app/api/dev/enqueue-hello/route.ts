@@ -7,8 +7,7 @@ async function enqueueHello() {
 
   return NextResponse.json({
     ok: true,
-    message:
-      "Dev enqueue endpoint is deprecated. Use /dashboard/intake or /dashboard/inbound-sim to create real jobs.",
+    message: "Dev enqueue endpoint is deprecated. Use the homepage reports instead.",
   });
 }
 

@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
 import { DM_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
 import { Toaster } from "sonner";
-import { CookieConsentBanner } from "@/components/cookie-consent-banner";
-import { requireStartupEnv } from "@/lib/env";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -32,31 +21,23 @@ const instrumentSerif = Instrument_Serif({
   weight: "400",
 });
 
-requireStartupEnv();
-
-const signInFallbackRedirectUrl =
-  process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ?? "/dashboard";
-const signUpFallbackRedirectUrl =
-  process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL ?? "/dashboard";
-
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://pipelineiq.app"
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: {
-    default: "PipelineIQ | Lead Workflow Operations",
+    default: "PipelineIQ | Personal Reports",
     template: "%s | PipelineIQ",
   },
   description:
-    "Lead intake, follow-up workflows, staff queues, and reports in one practical operations workspace.",
+    "A single-user reporting workspace for commission and team CSV views.",
   applicationName: "PipelineIQ",
   openGraph: {
     type: "website",
     siteName: "PipelineIQ",
     url: "/",
-    title: "PipelineIQ | Lead Workflow Operations",
-    description:
-      "Lead intake, follow-up workflows, staff queues, and reports in one practical operations workspace.",
+    title: "PipelineIQ | Personal Reports",
+    description: "A single-user reporting workspace for commission and team CSV views.",
     images: [
       {
         url: "/og-placeholder.svg",
@@ -68,9 +49,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PipelineIQ | Lead Workflow Operations",
-    description:
-      "Lead intake, follow-up workflows, staff queues, and reports in one workspace.",
+    title: "PipelineIQ | Personal Reports",
+    description: "A single-user reporting workspace for commission and team CSV views.",
     images: ["/og-placeholder.svg"],
   },
 };
@@ -85,29 +65,8 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
     >
-      <body className="min-h-screen bg-background font-sans antialiased">
-        <ClerkProvider
-          signInFallbackRedirectUrl={signInFallbackRedirectUrl}
-          signUpFallbackRedirectUrl={signUpFallbackRedirectUrl}
-        >
-          <header className="sticky top-0 z-10 flex items-center justify-between gap-6 border-b border-border/50 bg-background/90 px-6 py-4 text-sm font-semibold text-foreground backdrop-blur">
-            <Link href="/">PipelineIQ</Link>
-            <div className="flex items-center gap-2">
-              <Link href="/pricing" className="text-ink-2 hover:text-ink">
-                Pricing
-              </Link>
-              <SignedOut>
-                <SignInButton mode="modal">Sign in</SignInButton>
-                <SignUpButton mode="modal">Sign up</SignUpButton>
-              </SignedOut>
-              <SignedIn>
-                <UserButton afterSignOutUrl="/" />
-              </SignedIn>
-            </div>
-          </header>
-          {children}
-          <CookieConsentBanner />
-        </ClerkProvider>
+      <body className="min-h-screen bg-paper font-sans antialiased text-ink">
+        {children}
         <Toaster position="top-right" richColors />
       </body>
     </html>
