@@ -924,7 +924,6 @@ export function RepRoster() {
       </div>
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&display=swap');
 
         .manager-dashboard,
         .manager-dashboard *,
@@ -939,36 +938,20 @@ export function RepRoster() {
         }
 
         .manager-dashboard {
-          --bg: #0e0f13;
-          --surface: #16181f;
-          --surface-2: #1e2028;
-          --border: #272a33;
-          --ink: #f2f3f5;
-          --ink-2: #9098a8;
-          --ink-3: #4a5060;
-          --accent: #e05a20;
-          --accent-2: #ff7a42;
-          --green: #22c55e;
-          --green-light: rgba(34, 197, 94, 0.1);
-          --amber: #f59e0b;
-          --amber-light: rgba(245, 158, 11, 0.1);
-          --red: #ef4444;
-          --red-light: rgba(239, 68, 68, 0.1);
-          --blue: #3b82f6;
-          background: var(--bg);
+          background: var(--paper);
           color: var(--ink);
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 14px;
           line-height: 1.5;
           min-height: calc(100vh - 65px);
         }
 
         .manager-dashboard .mono {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
         }
 
         .manager-dashboard .serif {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
         }
 
         .manager-dashboard .page {
@@ -985,7 +968,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .page-eyebrow {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.15em;
@@ -994,7 +977,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .page-title {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 44px;
           letter-spacing: -1.5px;
           line-height: 1;
@@ -1010,7 +993,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .sync-status {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
         }
@@ -1025,7 +1008,7 @@ export function RepRoster() {
           border: 1px solid var(--border);
           padding: 9px 18px;
           border-radius: 7px;
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 13px;
           font-weight: 600;
           cursor: pointer;
@@ -1087,7 +1070,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .year-btn {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           padding: 6px 14px;
           border-radius: 5px;
@@ -1113,7 +1096,7 @@ export function RepRoster() {
           border: none;
           padding: 9px 18px;
           border-radius: 7px;
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 13px;
           font-weight: 600;
           cursor: pointer;
@@ -1140,7 +1123,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .tab {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 13px;
           font-weight: 500;
           padding: 12px 18px;
@@ -1183,7 +1166,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .period-btn {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           padding: 5px 12px;
           border-radius: 5px;
@@ -1205,7 +1188,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .sort-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.1em;
@@ -1218,7 +1201,7 @@ export function RepRoster() {
           color: var(--ink);
           border-radius: 6px;
           padding: 7px 28px 7px 12px;
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 12px;
           cursor: pointer;
           appearance: none;
@@ -1241,7 +1224,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .sync-progress-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           margin-bottom: 10px;
@@ -1277,7 +1260,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .sync-rep-chip {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           padding: 3px 10px;
           border-radius: 99px;
@@ -1333,7 +1316,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .summary-stat-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.1em;
@@ -1342,14 +1325,14 @@ export function RepRoster() {
         }
 
         .manager-dashboard .summary-stat-value {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 30px;
           letter-spacing: -0.5px;
           line-height: 1;
         }
 
         .manager-dashboard .summary-stat-sub {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           margin-top: 4px;
@@ -1367,7 +1350,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .team-name {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 11px;
           font-weight: 700;
           text-transform: uppercase;
@@ -1376,7 +1359,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .team-meta {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
         }
@@ -1388,7 +1371,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .team-total-badge {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--accent);
           background: rgba(224, 90, 32, 0.1);
@@ -1425,7 +1408,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-card-name {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 15px;
           font-weight: 700;
           margin-bottom: 4px;
@@ -1438,7 +1421,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-team-badge {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.06em;
@@ -1450,7 +1433,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-rank {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 32px;
           color: var(--ink-3);
           line-height: 1;
@@ -1469,7 +1452,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-stat-value {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 24px;
           letter-spacing: -0.5px;
           line-height: 1;
@@ -1477,14 +1460,14 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-stat-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           letter-spacing: 0.04em;
           color: var(--ink-2);
         }
 
         .manager-dashboard .rep-stat-sub {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           letter-spacing: 0.04em;
           color: var(--ink-3);
@@ -1520,7 +1503,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .btn-sm {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 12px;
           font-weight: 500;
           padding: 6px 14px;
@@ -1556,7 +1539,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .rep-synced {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
         }
@@ -1567,7 +1550,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .comparison-title {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.12em;
@@ -1592,7 +1575,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .comparison-table th {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
@@ -1624,7 +1607,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .comp-rank {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           width: 24px;
@@ -1636,14 +1619,14 @@ export function RepRoster() {
         }
 
         .manager-dashboard .comp-team {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           margin-top: 2px;
         }
 
         .manager-dashboard .comp-mono {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
         }
 
@@ -1653,7 +1636,7 @@ export function RepRoster() {
 
         .manager-dashboard .comp-missed {
           color: var(--amber);
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
         }
 
@@ -1679,7 +1662,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .modal-title {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 32px;
           letter-spacing: -1px;
           margin-bottom: 28px;
@@ -1690,7 +1673,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .form-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.1em;
@@ -1706,7 +1689,7 @@ export function RepRoster() {
           border-radius: 7px;
           padding: 11px 14px;
           color: var(--ink);
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 13px;
           transition: border-color 0.15s;
           outline: none;
@@ -1721,7 +1704,7 @@ export function RepRoster() {
         }
 
         .manager-dashboard .form-hint {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           margin-top: 5px;
@@ -1734,7 +1717,7 @@ export function RepRoster() {
           border: none;
           border-radius: 8px;
           padding: 14px;
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
@@ -1755,7 +1738,7 @@ export function RepRoster() {
           display: block;
           width: 100%;
           text-align: center;
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           margin-top: 14px;

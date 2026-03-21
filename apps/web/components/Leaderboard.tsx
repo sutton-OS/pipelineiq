@@ -562,7 +562,6 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
       </div>
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&display=swap');
 
         .manager-dashboard .leaderboard-view,
         .manager-dashboard .leaderboard-view *,
@@ -572,21 +571,6 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .leaderboard-view {
-          --bg: #0e0f13;
-          --surface: #16181f;
-          --surface-2: #1e2028;
-          --border: #272a33;
-          --ink: #f2f3f5;
-          --ink-2: #9098a8;
-          --ink-3: #4a5060;
-          --accent: #e05a20;
-          --accent-2: #ff7a42;
-          --green: #22c55e;
-          --green-light: rgba(34, 197, 94, 0.1);
-          --amber: #f59e0b;
-          --amber-light: rgba(245, 158, 11, 0.1);
-          --red: #ef4444;
-          --red-light: rgba(239, 68, 68, 0.1);
           --gold: #f59e0b;
           --silver: #9098a8;
           --bronze: #cd7c3a;
@@ -619,7 +603,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .period-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           text-transform: uppercase;
@@ -627,7 +611,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .period-name {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 14px;
           font-weight: 600;
         }
@@ -642,13 +626,13 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .period-banner-stat-value {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 20px;
           letter-spacing: -0.5px;
         }
 
         .manager-dashboard .period-banner-stat-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
@@ -656,7 +640,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .period-banner-right {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           display: flex;
@@ -720,7 +704,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-rank {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 48px;
           letter-spacing: -2px;
           line-height: 1;
@@ -740,14 +724,14 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-name {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 15px;
           font-weight: 700;
           margin-bottom: 4px;
         }
 
         .manager-dashboard .podium-team {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           text-transform: uppercase;
@@ -756,7 +740,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-amount {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 28px;
           letter-spacing: -0.5px;
           margin-bottom: 2px;
@@ -767,7 +751,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-period-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           color: var(--ink-3);
           text-transform: uppercase;
@@ -776,14 +760,14 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-month-value {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 14px;
           color: var(--ink-2);
           margin-bottom: 2px;
         }
 
         .manager-dashboard .podium-month-label {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           color: var(--ink-3);
           text-transform: uppercase;
@@ -798,13 +782,13 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .podium-stat-val {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           color: var(--ink-2);
         }
 
         .manager-dashboard .podium-stat-lab {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 9px;
           color: var(--ink-3);
           text-transform: uppercase;
@@ -840,7 +824,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .leaderboard-title {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.12em;
@@ -848,7 +832,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .leaderboard-meta {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
         }
@@ -863,7 +847,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .lb-table th {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
@@ -930,7 +914,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .rank-num {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 13px;
           width: 28px;
           text-align: center;
@@ -949,34 +933,34 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .rep-name-lb {
-          font-family: "Syne", sans-serif;
+          font-family: var(--font-sans), sans-serif;
           font-size: 14px;
           font-weight: 600;
         }
 
         .manager-dashboard .rep-team-lb {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           margin-top: 1px;
         }
 
         .manager-dashboard .val-primary {
-          font-family: "Instrument Serif", serif;
+          font-family: var(--font-serif), serif;
           font-size: 18px;
           letter-spacing: -0.3px;
           font-weight: 600;
         }
 
         .manager-dashboard .val-secondary {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           color: var(--ink-3);
           margin-top: 2px;
         }
 
         .manager-dashboard .val-mono {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           color: var(--ink-2);
         }
@@ -1016,7 +1000,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .status-badge {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           font-weight: 500;
           padding: 3px 10px;
@@ -1040,7 +1024,7 @@ export function Leaderboard({ reps, period }: { reps: Rep[]; selectedYear: numbe
         }
 
         .manager-dashboard .move {
-          font-family: "DM Mono", monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10px;
           display: flex;
           align-items: center;

@@ -280,7 +280,7 @@ export function DashboardClient(props: DashboardClientProps) {
             <span className="text-white">{goalPercentDisplay} to goal</span>
             <span className="text-white">Need {remainingToGoalDisplay} more</span>
           </div>
-          <div className="h-[6px] overflow-hidden rounded-full bg-white/15">
+          <div className="h-[6px] overflow-hidden rounded-full bg-[var(--surface)]/15">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${goalBarPercent}%` }} />
           </div>
           <p className="mt-1.5 text-[11px] text-white text-white/40">On track threshold: 78% at this point in month</p>
@@ -288,24 +288,24 @@ export function DashboardClient(props: DashboardClientProps) {
       </section>
 
       <section className="mb-9 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-5 py-[18px]">
+        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-5 py-[18px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--ink-3)]">Avg Deal Size</p>
           <p className="mt-2 font-serif text-[30px] leading-none tracking-[-0.5px] text-[var(--ink)]">{avgDealSizeDisplay}</p>
           <p className="mt-2 font-mono text-[11px]" style={{ color: deltaToneColor(avgDealDeltaTone) }}>
             {avgDealDeltaDisplay ?? "\u2014"}
           </p>
         </div>
-        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-5 py-[18px]">
+        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-5 py-[18px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--ink-3)]">Conversion Rate</p>
           <p className="mt-2 font-serif text-[30px] leading-none tracking-[-0.5px] text-[var(--ink)]">{conversionRateDisplay}</p>
           <p className="mt-2 font-mono text-[11px] text-[var(--accent)]">Based on qualified leads</p>
         </div>
-        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-5 py-[18px]">
+        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-5 py-[18px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--ink-3)]">Avg Time to Close</p>
           <p className="mt-2 font-serif text-[30px] leading-none tracking-[-0.5px] text-[var(--ink)]">{avgDaysToCloseDisplay}</p>
           <p className="mt-2 font-mono text-[11px] text-[var(--green)]">Pipeline velocity signal</p>
         </div>
-        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-5 py-[18px]">
+        <div className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-5 py-[18px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--ink-3)]">Total Activity</p>
           <p className="mt-2 font-serif text-[30px] leading-none tracking-[-0.5px] text-[var(--ink)]">{totalActivityDisplay}</p>
           <p className="mt-2 font-mono text-[11px] text-[var(--ink-3)]">calls + emails + visits</p>
@@ -381,7 +381,7 @@ export function DashboardClient(props: DashboardClientProps) {
       </section>
 
       <section className="mb-9 grid gap-5 lg:grid-cols-2">
-        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-6 py-[22px]">
+        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-6 py-[22px]">
           <h3 className="mb-[18px] text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Pipeline Funnel</h3>
           <div className="flex flex-col gap-2.5">
             {funnelStages.map((stage, index) => {
@@ -404,7 +404,7 @@ export function DashboardClient(props: DashboardClientProps) {
           </div>
         </article>
 
-        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-6 py-[22px]">
+        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-6 py-[22px]">
           <h3 className="mb-[18px] text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Deal Size Distribution</h3>
           <div className="flex flex-col gap-2">
             {dealDistribution.rows.map((row) => (
@@ -423,7 +423,7 @@ export function DashboardClient(props: DashboardClientProps) {
           </div>
         </article>
 
-        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-6 py-[22px]">
+        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-6 py-[22px]">
           <h3 className="mb-[18px] text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Avg. Time to Close (Days)</h3>
           <div className="flex flex-col gap-3">
             {timeToCloseRows.map((rep, index) => (
@@ -440,7 +440,7 @@ export function DashboardClient(props: DashboardClientProps) {
           </div>
         </article>
 
-        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-white px-6 py-[22px]">
+        <article className="rounded-[8px] border-[1.5px] border-[var(--border)] bg-[var(--surface)] px-6 py-[22px]">
           <h3 className="mb-[18px] text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Activity Breakdown</h3>
           <table className="w-full border-collapse">
             <tbody>

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { DM_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
+import { DM_Mono, Instrument_Serif, Syne } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+const syne = Syne({
   subsets: ["latin"],
   variable: "--font-sans",
-  weight: ["300", "400", "500", "600"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 const dmMono = DM_Mono({
@@ -63,11 +63,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
+      className={`${syne.variable} ${dmMono.variable} ${instrumentSerif.variable}`}
     >
-      <body className="min-h-screen bg-paper font-sans antialiased text-ink">
+      <body className="min-h-screen bg-paper font-sans antialiased text-ink dark">
         {children}
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-right" richColors theme="dark" />
       </body>
     </html>
   );

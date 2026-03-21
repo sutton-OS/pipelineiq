@@ -482,14 +482,6 @@ export function ReportUploader({
   }, [lastSyncedAt]);
 
   useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Syne:wght@600&display=swap";
-    document.head.appendChild(link);
-  }, []);
-
-  useEffect(() => {
     if (!report) return;
 
     const frame = requestAnimationFrame(() => {
@@ -892,7 +884,7 @@ export function ReportUploader({
   body {
     background: var(--paper);
     color: var(--ink);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Syne', sans-serif;
     font-size: 14px;
     line-height: 1.5;
   }
@@ -1299,7 +1291,7 @@ export function ReportUploader({
   .pay-trend-tooltip-line {
     fill: #f7f5f0;
     font-size: 10px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Syne', sans-serif;
   }
   .pay-trend-tooltip-title {
     fill: #ffffff;
@@ -1515,7 +1507,7 @@ export function ReportUploader({
   .export-btn {
     position: fixed; top: 24px; right: 24px;
     background: var(--ink); color: white; border: none; border-radius: 6px;
-    padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: 12px;
+    padding: 9px 18px; font-family: 'Syne', sans-serif; font-size: 12px;
     font-weight: 500; cursor: pointer; letter-spacing: 0.03em;
     display: flex; align-items: center; gap: 7px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.15); transition: opacity 0.15s; z-index: 100;
@@ -1947,7 +1939,7 @@ export function ReportUploader({
     <title>${safeName}.pdf</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&display=swap" />
     <style>
       @page { size: auto; margin: 10mm; }
       html, body { margin: 0; padding: 0; }
@@ -2059,7 +2051,7 @@ export function ReportUploader({
                   <div>
                     <div
                       style={{
-                        fontFamily: "'Syne', sans-serif",
+                        fontFamily: "var(--font-sans), sans-serif",
                         fontSize: "13px",
                         fontWeight: 600,
                         color: "#f2f3f5",
@@ -2072,7 +2064,7 @@ export function ReportUploader({
                     </div>
                     <div
                       style={{
-                        fontFamily: "'DM Mono', monospace",
+                        fontFamily: "var(--font-mono), monospace",
                         fontSize: "10px",
                         color: "rgba(255,255,255,0.35)",
                         marginTop: "2px",
@@ -2095,7 +2087,7 @@ export function ReportUploader({
                       display: "flex",
                       alignItems: "center",
                       gap: "5px",
-                      fontFamily: "'DM Mono', monospace",
+                      fontFamily: "var(--font-mono), monospace",
                       fontSize: "10px",
                       color: "#22c55e",
                     }}
@@ -2113,7 +2105,7 @@ export function ReportUploader({
                   </div>
                   <div
                     style={{
-                      fontFamily: "'DM Mono', monospace",
+                      fontFamily: "var(--font-mono), monospace",
                       fontSize: "10px",
                       color: "#4a5060",
                     }}
@@ -2137,7 +2129,7 @@ export function ReportUploader({
                       border: "1px solid #272a33",
                       padding: "6px 12px",
                       borderRadius: "6px",
-                      fontFamily: "'Syne', sans-serif",
+                      fontFamily: "var(--font-sans), sans-serif",
                       fontSize: "12px",
                       fontWeight: 500,
                       cursor: isSyncing ? "not-allowed" : "pointer",
@@ -2187,7 +2179,7 @@ export function ReportUploader({
                       border: "none",
                       padding: "11px 20px",
                       borderRadius: "8px",
-                      fontFamily: "'Syne', sans-serif",
+                      fontFamily: "var(--font-sans), sans-serif",
                       fontSize: "13px",
                       fontWeight: 600,
                       cursor: isSyncing ? "not-allowed" : "pointer",
@@ -2294,7 +2286,7 @@ export function ReportUploader({
                     <>
                       <div
                         style={{
-                          fontFamily: "'Syne', sans-serif",
+                          fontFamily: "var(--font-sans), sans-serif",
                           fontSize: "15px",
                           fontWeight: 600,
                           color: "#e05a20",
@@ -2304,7 +2296,7 @@ export function ReportUploader({
                       </div>
                       <div
                         style={{
-                          fontFamily: "'DM Mono', monospace",
+                          fontFamily: "var(--font-mono), monospace",
                           fontSize: "12px",
                           color: "#4a5060",
                         }}
@@ -2316,7 +2308,7 @@ export function ReportUploader({
                     <>
                       <div
                         style={{
-                          fontFamily: "'Syne', sans-serif",
+                          fontFamily: "var(--font-sans), sans-serif",
                           fontSize: "15px",
                           fontWeight: 600,
                           color: isDragging ? "#22c55e" : "#f2f3f5",
@@ -2326,7 +2318,7 @@ export function ReportUploader({
                       </div>
                       <div
                         style={{
-                          fontFamily: "'DM Mono', monospace",
+                          fontFamily: "var(--font-mono), monospace",
                           fontSize: "12px",
                           color: isDragging ? "#22c55e" : "#4a5060",
                         }}
@@ -2341,7 +2333,7 @@ export function ReportUploader({
                             background: "rgba(34,197,94,0.08)",
                             border: "1px solid rgba(34,197,94,0.2)",
                             color: "#22c55e",
-                            fontFamily: "'DM Mono', monospace",
+                            fontFamily: "var(--font-mono), monospace",
                             fontSize: "11px",
                             fontWeight: 500,
                             padding: "4px 12px",
@@ -2385,7 +2377,7 @@ export function ReportUploader({
                 border: "none",
                 padding: "11px 20px",
                 borderRadius: "8px",
-                fontFamily: "'Syne', sans-serif",
+                fontFamily: "var(--font-sans), sans-serif",
                 fontSize: "13px",
                 fontWeight: 600,
                 cursor: isSyncing ? "not-allowed" : "pointer",
@@ -2409,7 +2401,7 @@ export function ReportUploader({
             {lastSyncedAgoLabel ? (
               <p
                 style={{
-                  fontFamily: "'DM Mono', monospace",
+                  fontFamily: "var(--font-mono), monospace",
                   fontSize: "10px",
                   color: "#4a5060",
                 }}

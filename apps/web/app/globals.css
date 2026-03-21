@@ -3,25 +3,28 @@
 @tailwind utilities;
 
 :root {
-  --ink: #111827;
-  --ink-2: #4b5563;
-  --ink-3: #6b7280;
-  --paper: #f5f1ea;
-  --paper-2: #ffffff;
-  --paper-3: #e5ddd1;
-  --accent: #c8491a;
-  --accent-light: #f5e8e2;
-  --green: #1a6e3c;
-  --green-light: #e2f0e8;
-  --amber: #b07d00;
-  --amber-light: #fdf4d8;
-  --border: #d9d1c6;
+  --ink: #f2f3f5;
+  --ink-2: #9098a8;
+  --ink-3: #4a5060;
+  --paper: #0e0f13;
+  --paper-2: #16181f;
+  --paper-3: #1e2028;
+  --accent: #e05a20;
+  --accent-2: #ff7a42;
+  --green: #22c55e;
+  --green-light: rgba(34, 197, 94, 0.1);
+  --amber: #f59e0b;
+  --amber-light: rgba(245, 158, 11, 0.1);
+  --red: #ef4444;
+  --red-light: rgba(239, 68, 68, 0.1);
+  --blue: #3b82f6;
+  --border: #272a33;
+  --surface: #16181f;
+  --surface-2: #1e2028;
 }
 
 html {
-  background:
-    radial-gradient(circle at top, rgba(200, 73, 26, 0.08), transparent 36%),
-    linear-gradient(180deg, #f7f3ed 0%, #f2ede4 100%);
+  background: #0e0f13;
 }
 
 body {
