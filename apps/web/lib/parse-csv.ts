@@ -94,6 +94,13 @@ function detectYearFromLabel(label: string) {
   if (label.includes("2026") || /\/26\b/.test(label)) return 2026;
   if (label.includes("2025") || /\/25\b/.test(label)) return 2025;
 
+  // Check for standalone 2-digit year patterns like "3/16/26" or "3/16-3/31/26"
+  const twoDigitYear = label.match(/\/(\d{2})\b/);
+  if (twoDigitYear) {
+    const yr = 2000 + Number.parseInt(twoDigitYear[1], 10);
+    if (yr >= 2000 && yr <= 2099) return yr;
+  }
+
   const parsed = new Date(label);
   if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
   return null;
@@ -222,7 +229,28 @@ function parseCommissionData(rawRows: CsvRawRow[]) {
 
     if (isPaySummaryRow(row)) {
       const period = parsePayPeriodSummary(row, payPeriods.length);
-      const periodYear = detectYearFromLabel(period.label);
+      let periodYear = detectYearFromLabel(period.label);
+      // If label doesn't contain an explicit year, infer from upcoming
+      // transaction dates so scanYear stays accurate for untagged periods.
+      if (periodYear === null) {
+        // Look ahead at the next ~50 rows for transaction dates to infer year
+        const currentIndex = rawRows.indexOf(rawRow);
+        for (let j = currentIndex + 1; j < Math.min(currentIndex + 50, rawRows.length); j++) {
+          const lookRow = rawRows[j].map((cell) => String(cell ?? "").trim());
+          if (lookRow.every((cell) => cell === "")) continue;
+          if (isPaySummaryRow(lookRow)) break; // hit next pay period
+          const lookMember = lookRow[1] ?? "";
+          if (!isValidMemberName(lookMember)) continue;
+          const lookDate = parseTransactionDate(lookRow[0] ?? "", scanYear);
+          if (lookDate) {
+            const inferredYear = lookDate.getFullYear();
+            if (inferredYear >= currentCalendarYear - 1 && inferredYear <= currentCalendarYear) {
+              periodYear = inferredYear;
+              break;
+            }
+          }
+        }
+      }
       if (periodYear !== null) scanYear = periodYear;
       if (period.amount > 0 || period.bonus > 0 || period.units > 0) {
         payPeriods.push({ ...period, year: periodYear });
