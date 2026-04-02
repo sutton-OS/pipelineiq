@@ -260,9 +260,16 @@ function parseCommissionData(rawRows: CsvRawRow[]) {
 
     const memberName = row[1] ?? "";
     const membershipTypeRaw = row[2] ?? "";
-    const trainer = row[4] ?? "";
     const commissionRaw = row[5] ?? "";
     if (!isValidMemberName(memberName)) continue;
+
+    // Trainer column is inconsistent: in most rows it's col 4 (FP date in col 3),
+    // but in some later rows the columns swap (trainer in col 3, FP date in col 4).
+    // Detect which column has the trainer name by checking if col 3 looks like a date.
+    const col3 = row[3] ?? "";
+    const col4 = row[4] ?? "";
+    const col3LooksLikeDate = /^\d{1,2}[\/-]\d{1,2}/.test(col3.trim()) || col3.trim().toLowerCase() === "n/a";
+    const trainer = col3LooksLikeDate ? col4 : col3;
 
     const commission = parseCommission(commissionRaw);
     const units = parseUnitsCell(row[6] ?? "");
@@ -289,7 +296,17 @@ function parseCommissionData(rawRows: CsvRawRow[]) {
   }
 
   return {
-    payPeriods,
+    payPeriods: payPeriods.filter((period, index, arr) => {
+      // Deduplicate: keep only the first occurrence of each unique pay period
+      return (
+        arr.findIndex(
+          (p) =>
+            p.label === period.label &&
+            p.amount === period.amount &&
+            p.units === period.units
+        ) === index
+      );
+    }),
     transactionRows,
     periodLabel,
   } satisfies RepData;
