@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { parseCommissionCSV } from "@/lib/parse-csv";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type MembershipKey =
   | "Premium"
@@ -107,6 +108,8 @@ const MEMBERSHIP_COLORS: Record<MembershipKey, string> = {
 
 const GOOGLE_SHEETS_SYNC_URL =
   "https://docs.google.com/spreadsheets/d/1mHZEg4MZrkrwb5Yb17Sy55yL_AEg40UDEY6gYa43_7Q/export?format=csv&gid=1050163422";
+const DEFAULT_PAY_PERIOD_GOAL = 1000;
+const PAY_PERIOD_GOAL_STORAGE_KEY = "pipelineiq:pay-period-goal";
 
 function buildEmptyMembershipCounts(): Record<MembershipKey, number> {
   return {
@@ -181,6 +184,11 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function normalizePayPeriodGoal(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PAY_PERIOD_GOAL;
+  return Math.max(Math.round(value), 1);
 }
 
 const SHORT_MONTHS = [
@@ -392,6 +400,8 @@ export function ReportUploader({
   const [parseError, setParseError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [parsedData, setParsedData] = useState<ParsedCommissionData | null>(initialParsedData);
+  const [payPeriodGoal, setPayPeriodGoal] = useState(DEFAULT_PAY_PERIOD_GOAL);
+  const [payPeriodGoalInput, setPayPeriodGoalInput] = useState(String(DEFAULT_PAY_PERIOD_GOAL));
 
   useEffect(() => {
     if (initialParsedData !== undefined) {
@@ -412,6 +422,25 @@ export function ReportUploader({
       initialLastSyncedAt instanceof Date ? initialLastSyncedAt : new Date(initialLastSyncedAt);
     setLastSyncedAt(Number.isNaN(parsed.getTime()) ? null : parsed);
   }, [initialLastSyncedAt]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedGoal = window.localStorage.getItem(PAY_PERIOD_GOAL_STORAGE_KEY);
+    if (!storedGoal) return;
+
+    const parsedGoal = Number.parseInt(storedGoal, 10);
+    if (!Number.isFinite(parsedGoal)) return;
+
+    const normalizedGoal = normalizePayPeriodGoal(parsedGoal);
+    setPayPeriodGoal(normalizedGoal);
+    setPayPeriodGoalInput(String(normalizedGoal));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PAY_PERIOD_GOAL_STORAGE_KEY, String(payPeriodGoal));
+  }, [payPeriodGoal]);
 
   const availableYears = useMemo(() => {
     if (!parsedData) return [];
@@ -479,7 +508,7 @@ export function ReportUploader({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [report]);
+  }, [payPeriodGoal, report]);
 
   const reportHTML = useMemo(() => {
     if (!report) return "";
@@ -489,7 +518,7 @@ export function ReportUploader({
         ? report.payPeriods.reduce((sum, period) => sum + period.amount, 0) /
           report.payPeriods.length
         : 0;
-    const GOAL = 1000;
+    const GOAL = payPeriodGoal;
     const currentCommission = report.currentPayPeriod.currentCommission;
     const currentSales = report.currentPayPeriod.currentSales;
     const remaining = Math.max(GOAL - currentCommission, 0);
@@ -1770,7 +1799,31 @@ export function ReportUploader({
     <div class="footer-note">Generated ${generatedDate} &middot; ${escapeHtml(repName)} &middot; GGIF Commissions</div>
   </div>
 </div>`;
-  }, [report, repName, selectedYear]);
+  }, [payPeriodGoal, report, repName, selectedYear]);
+
+  function updatePayPeriodGoal(value: string) {
+    const digitsOnly = value.replace(/[^\d]/g, "");
+    setPayPeriodGoalInput(digitsOnly);
+
+    if (!digitsOnly) return;
+
+    const nextGoal = Number.parseInt(digitsOnly, 10);
+    if (!Number.isFinite(nextGoal)) return;
+
+    setPayPeriodGoal(normalizePayPeriodGoal(nextGoal));
+  }
+
+  function commitPayPeriodGoal() {
+    const parsedGoal = Number.parseInt(payPeriodGoalInput, 10);
+    const normalizedGoal = normalizePayPeriodGoal(parsedGoal);
+    setPayPeriodGoal(normalizedGoal);
+    setPayPeriodGoalInput(String(normalizedGoal));
+  }
+
+  function resetPayPeriodGoal() {
+    setPayPeriodGoal(DEFAULT_PAY_PERIOD_GOAL);
+    setPayPeriodGoalInput(String(DEFAULT_PAY_PERIOD_GOAL));
+  }
 
   async function parseFile(file: File, onSuccess?: () => void) {
     if (!file.name.toLowerCase().endsWith(".csv")) {
@@ -2382,47 +2435,142 @@ export function ReportUploader({
             className="space-y-3"
             style={{ transition: "background 0.3s ease, color 0.3s ease" }}
           >
-            <div className="flex items-center justify-end gap-2">
-              {availableYears.length > 0 ? (
-                <>
-                  <span className="year-label">Viewing:</span>
-                  <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
-                    {availableYears.map((year) => {
-                      const isActive = year === selectedYear;
-                      return (
-                        <button
-                          key={year}
-                          type="button"
-                          onClick={() => setSelectedYear(year)}
-                          className={`year-btn ${
-                            isActive ? "year-btn-active" : "year-btn-inactive"
-                          }`}
-                        >
-                          {year}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : null}
-              <Button
-                type="button"
-                disabled={isGenerating || !report}
-                onClick={exportPdf}
-                className="h-9 border border-[#2f2f2f] bg-[#0f0f0f] px-3.5 text-xs font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div
+                className="rounded-xl border px-4 py-3"
+                style={{
+                  borderColor: "#272a33",
+                  background: "#16181f",
+                }}
               >
-                {isGenerating ? (
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p
+                      style={{
+                        fontFamily: "var(--font-mono), monospace",
+                        fontSize: "10px",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#4a5060",
+                      }}
+                    >
+                      Pay Period Sales Goal
+                    </p>
+                    <p
+                      style={{
+                        marginTop: "6px",
+                        fontFamily: "var(--font-sans), sans-serif",
+                        fontSize: "13px",
+                        color: "#9098a8",
+                      }}
+                    >
+                      Updates the progress bar and daily target for the current period.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetPayPeriodGoal}
+                    disabled={payPeriodGoal === DEFAULT_PAY_PERIOD_GOAL}
+                    style={{
+                      border: "1px solid #272a33",
+                      borderRadius: "6px",
+                      background: "transparent",
+                      color:
+                        payPeriodGoal === DEFAULT_PAY_PERIOD_GOAL ? "rgba(144,152,168,0.45)" : "#9098a8",
+                      fontFamily: "var(--font-mono), monospace",
+                      fontSize: "10px",
+                      padding: "6px 10px",
+                      cursor:
+                        payPeriodGoal === DEFAULT_PAY_PERIOD_GOAL ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="relative w-full max-w-[180px]">
+                    <span
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      style={{
+                        fontFamily: "var(--font-mono), monospace",
+                        fontSize: "13px",
+                        color: "#9098a8",
+                      }}
+                    >
+                      $
+                    </span>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={payPeriodGoalInput}
+                      onChange={(event) => updatePayPeriodGoal(event.target.value)}
+                      onBlur={commitPayPeriodGoal}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitPayPeriodGoal();
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      aria-label="Pay period sales goal"
+                      className="h-10 border-[#2f3340] bg-[#0f1117] pl-7 text-sm font-semibold text-[#f2f3f5] focus-visible:border-[#e05a20] focus-visible:ring-[rgba(224,90,32,0.18)]"
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono), monospace",
+                      fontSize: "11px",
+                      color: "#4a5060",
+                    }}
+                  >
+                    Goal applies immediately
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {availableYears.length > 0 ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Preparing PDF...
+                    <span className="year-label">Viewing:</span>
+                    <div className="inline-flex items-center gap-1 rounded-md bg-transparent">
+                      {availableYears.map((year) => {
+                        const isActive = year === selectedYear;
+                        return (
+                          <button
+                            key={year}
+                            type="button"
+                            onClick={() => setSelectedYear(year)}
+                            className={`year-btn ${
+                              isActive ? "year-btn-active" : "year-btn-inactive"
+                            }`}
+                          >
+                            {year}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    Export PDF
-                  </>
-                )}
-              </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={isGenerating || !report}
+                  onClick={exportPdf}
+                  className="h-9 border border-[#2f2f2f] bg-[#0f0f0f] px-3.5 text-xs font-semibold text-[#f7f5f0] hover:bg-[#1a1a1a] disabled:bg-[#1a1a1a] disabled:text-[#8f8f8f]"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Preparing PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Export PDF
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
             <div ref={reportExportRef} dangerouslySetInnerHTML={{ __html: reportHTML }} />
           </div>
